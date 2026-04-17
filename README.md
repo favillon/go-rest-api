@@ -8,14 +8,14 @@ La aplicacion carga variables de entorno desde el archivo `.env`.
 
 Variables usadas:
 
-- `PORT_APP`: puerto donde corre la API. Por defecto: `8082`
-- `POSTGRES_HOST`: host de PostgreSQL. Por defecto: `localhost`
-- `POSTGRES_PORT`: puerto de PostgreSQL. Por defecto: `5432`
+- `PORT_APP`: puerto donde corre la API (default: `8082`)
+- `POSTGRES_HOST`: host de PostgreSQL (default: `localhost`)
+- `POSTGRES_PORT`: puerto de PostgreSQL (default: `5432`)
 - `POSTGRES_DB`: nombre de la base de datos
 - `POSTGRES_USER`: usuario de PostgreSQL
-- `POSTGRES_PASSWORD`: contraseña de PostgreSQL
+- `POSTGRES_PASSWORD`: password de PostgreSQL
 
-Ejemplo de archivo `.env`:
+Ejemplo (`.env.example`):
 
 ```dotenv
 PORT_APP=8082
@@ -23,63 +23,84 @@ POSTGRES_HOST=localhost
 POSTGRES_PORT=5432
 POSTGRES_DB=restapi_go_db
 POSTGRES_USER=user_go
-POSTGRES_PASSWORD=P4ssW0rS3cr3t
+POSTGRES_PASSWORD=change_me
 ```
 
-## Docker Compose
+## Base de datos (Docker)
 
-El archivo `docker-compose.yml` levanta un servicio de PostgreSQL 18 con volumen persistente.
+El archivo `docker-compose.yml` levanta PostgreSQL 18 y mapea el puerto:
 
-Para iniciar la base de datos:
+- `5432:${POSTGRES_PORT}`
+
+Comandos utiles:
 
 ```bash
 docker compose up -d postgres
+docker compose ps
+docker compose down
 ```
 
-## Ejecucion de la aplicacion
+## Ejecucion de la API
 
-1. Levantar PostgreSQL con Docker.
-2. Ejecutar la API:
+### Modo normal
 
 ```bash
 go run .
 ```
 
-## Endpoint expuesto
-
-La API expone actualmente este endpoint:
-
-- `GET /api/v1/productos` - Lista todos los productos
-
-La aplicacion escucha en el puerto definido por `PORT_APP`.
-
-Ejemplo:
+### Modo desarrollo con recarga (Air)
 
 ```bash
-http://localhost:8082/api/v1/productos
+air
+```
+
+La API queda disponible en:
+
+```bash
+http://localhost:${PORT_APP}
+```
+
+## Endpoints expuestos
+
+Prefijo base: `/api/v1`
+
+- `GET /api/v1/productos` - Lista productos
+- `GET /api/v1/productos/:id` - Obtiene un producto por UUID
+- `POST /api/v1/productos` - Crea un producto
+- `PUT /api/v1/productos/:id` - Actualiza un producto por UUID
+- `DELETE /api/v1/productos/:id` - Elimina un producto por UUID
+
+Ejemplos:
+
+```bash
+curl http://localhost:8082/api/v1/productos
+curl http://localhost:8082/api/v1/productos/<uuid>
 ```
 
 ## Estructura del proyecto
 
 ```text
 .
-├── config/             # Conexion a la base de datos
-│   └── db.go
-├── controllers/        # Manejadores de rutas
-│   └── producto_controller.go
-├── models/             # Entidades GORM
-│   └── producto.go
-├── docker-compose.yml  # Servicio PostgreSQL 18
-├── .env                # Variables de entorno locales
-├── .env.example        # Plantilla de variables de entorno
+├── .air.toml
+├── .env
+├── .env.example
 ├── .gitignore
-├── main.go             # Punto de entrada de la API
+├── README.md
+├── config/
+│   └── db.go
+├── controllers/
+│   └── producto_controller.go
+├── models/
+│   └── producto.go
+├── docker-compose.yml
+├── main.go
 ├── go.mod
-└── go.sum
+├── go.sum
+└── tmp/
 ```
 
-## Notas
+## Notas tecnicas
 
-- El proyecto usa GORM para conectar con PostgreSQL.
-- Gin maneja las rutas HTTP.
-- Si quieres agregar nuevos endpoints, el archivo principal para rutas es `main.go`.
+- Se usa `uuid` como clave primaria en `Producto`.
+- El endpoint `GET /productos/:id` valida UUID y maneja `record not found`.
+- La conexion a DB se inicializa en `main.go` con `config.InitDB()`.
