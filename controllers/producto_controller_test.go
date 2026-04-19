@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	apierrors "backend-productos/api/errors"
 	"backend-productos/config"
 	"backend-productos/models"
 
@@ -33,6 +34,28 @@ func SetupTestDB(t *testing.T) (*gorm.DB, sqlmock.Sqlmock) {
 	assert.NoError(t, err)
 
 	return db, mock
+}
+
+type apiErrorResponse struct {
+	Code    string `json:"code"`
+	Message string `json:"message"`
+}
+
+type apiResponse struct {
+	Status  string            `json:"status"`
+	Message string            `json:"message"`
+	Data    json.RawMessage   `json:"data"`
+	Error   *apiErrorResponse `json:"error"`
+}
+
+func decodeAPIResponse(t *testing.T, body []byte) apiResponse {
+	t.Helper()
+
+	var response apiResponse
+	err := json.Unmarshal(body, &response)
+	assert.NoError(t, err)
+
+	return response
 }
 
 func TestCrearProducto_Exito(t *testing.T) {
@@ -61,8 +84,17 @@ func TestCrearProducto_Exito(t *testing.T) {
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
+	response := decodeAPIResponse(t, w.Body.Bytes())
+
+	var data models.Producto
+	err := json.Unmarshal(response.Data, &data)
+	assert.NoError(t, err)
+
 	// 3. Assert (Verificar)
 	assert.Equal(t, http.StatusCreated, w.Code)
+	assert.Equal(t, "success", response.Status)
+	assert.Equal(t, "Recurso creado correctamente", response.Message)
+	assert.Equal(t, "Producto Test", data.Nombre)
 }
 
 func TestCrearProducto_ValidacionFallida(t *testing.T) {
@@ -77,13 +109,13 @@ func TestCrearProducto_ValidacionFallida(t *testing.T) {
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
-	var response map[string]string
-	err := json.Unmarshal(w.Body.Bytes(), &response)
-	assert.NoError(t, err)
+	response := decodeAPIResponse(t, w.Body.Bytes())
 
 	assert.Equal(t, http.StatusBadRequest, w.Code)
-	assert.Equal(t, "Validacion fallida", response["error"])
-	assert.Contains(t, response["message"], "Nombre")
+	assert.Equal(t, "error", response.Status)
+	assert.Equal(t, "La solicitud contiene datos inválidos", response.Message)
+	assert.Equal(t, string(apierrors.Validation), response.Error.Code)
+	assert.Contains(t, response.Error.Message, "Nombre")
 }
 
 func TestActualizarProducto_Exito(t *testing.T) {
@@ -112,15 +144,19 @@ func TestActualizarProducto_Exito(t *testing.T) {
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
-	var response models.Producto
-	err := json.Unmarshal(w.Body.Bytes(), &response)
+	response := decodeAPIResponse(t, w.Body.Bytes())
+
+	var data models.Producto
+	err := json.Unmarshal(response.Data, &data)
 	assert.NoError(t, err)
 
 	assert.Equal(t, http.StatusOK, w.Code)
-	assert.Equal(t, uuid.MustParse(productoID), response.ID)
-	assert.Equal(t, "Producto actualizado", response.Nombre)
-	assert.Equal(t, "Descripcion nueva", response.Descripcion)
-	assert.Equal(t, 20.75, response.Precio)
+	assert.Equal(t, "success", response.Status)
+	assert.Equal(t, "Recurso actualizado correctamente", response.Message)
+	assert.Equal(t, uuid.MustParse(productoID), data.ID)
+	assert.Equal(t, "Producto actualizado", data.Nombre)
+	assert.Equal(t, "Descripcion nueva", data.Descripcion)
+	assert.Equal(t, 20.75, data.Precio)
 	assert.NoError(t, mock.ExpectationsWereMet())
 }
 
@@ -134,12 +170,12 @@ func TestActualizarProducto_IDInvalido(t *testing.T) {
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
-	var response map[string]string
-	err := json.Unmarshal(w.Body.Bytes(), &response)
-	assert.NoError(t, err)
+	response := decodeAPIResponse(t, w.Body.Bytes())
 
 	assert.Equal(t, http.StatusBadRequest, w.Code)
-	assert.Equal(t, "id inválido", response["error"])
+	assert.Equal(t, "error", response.Status)
+	assert.Equal(t, string(apierrors.InvalidParam), response.Error.Code)
+	assert.Equal(t, "id inválido", response.Error.Message)
 }
 
 func TestActualizarProducto_NoEncontrado(t *testing.T) {
@@ -160,12 +196,12 @@ func TestActualizarProducto_NoEncontrado(t *testing.T) {
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
-	var response map[string]string
-	err := json.Unmarshal(w.Body.Bytes(), &response)
-	assert.NoError(t, err)
+	response := decodeAPIResponse(t, w.Body.Bytes())
 
 	assert.Equal(t, http.StatusNotFound, w.Code)
-	assert.Equal(t, "producto no encontrado", response["error"])
+	assert.Equal(t, "error", response.Status)
+	assert.Equal(t, string(apierrors.NotFound), response.Error.Code)
+	assert.Equal(t, "producto no encontrado", response.Error.Message)
 	assert.NoError(t, mock.ExpectationsWereMet())
 }
 
@@ -190,14 +226,14 @@ func TestActualizarProducto_PayloadInvalido(t *testing.T) {
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
-	var response map[string]string
-	err := json.Unmarshal(w.Body.Bytes(), &response)
-	assert.NoError(t, err)
+	response := decodeAPIResponse(t, w.Body.Bytes())
 
 	assert.Equal(t, http.StatusBadRequest, w.Code)
+	assert.Equal(t, "error", response.Status)
+	assert.Equal(t, string(apierrors.Validation), response.Error.Code)
 	assert.True(t,
-		strings.Contains(response["error"], "invalid character") ||
-			strings.Contains(response["error"], "unexpected EOF"),
+		strings.Contains(response.Error.Message, "invalid character") ||
+			strings.Contains(response.Error.Message, "unexpected EOF"),
 	)
 	assert.NoError(t, mock.ExpectationsWereMet())
 }
@@ -218,12 +254,12 @@ func TestActualizarProducto_ErrorDB(t *testing.T) {
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
-	var response map[string]string
-	err := json.Unmarshal(w.Body.Bytes(), &response)
-	assert.NoError(t, err)
+	response := decodeAPIResponse(t, w.Body.Bytes())
 
 	assert.Equal(t, http.StatusInternalServerError, w.Code)
-	assert.Equal(t, "db failure", response["error"])
+	assert.Equal(t, "error", response.Status)
+	assert.Equal(t, string(apierrors.Database), response.Error.Code)
+	assert.Equal(t, "db failure", response.Error.Message)
 	assert.NoError(t, mock.ExpectationsWereMet())
 }
 
@@ -245,16 +281,20 @@ func TestObtenerProductos_Exito(t *testing.T) {
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
-	var response []models.Producto
-	err := json.Unmarshal(w.Body.Bytes(), &response)
+	response := decodeAPIResponse(t, w.Body.Bytes())
+
+	var data []models.Producto
+	err := json.Unmarshal(response.Data, &data)
 	assert.NoError(t, err)
 
 	assert.Equal(t, http.StatusOK, w.Code)
-	assert.Len(t, response, 2)
-	assert.Equal(t, "Teclado", response[0].Nombre)
-	assert.Equal(t, 99.99, response[0].Precio)
-	assert.Equal(t, "Mouse", response[1].Nombre)
-	assert.Equal(t, 49.50, response[1].Precio)
+	assert.Equal(t, "success", response.Status)
+	assert.Equal(t, "Datos recuperados correctamente", response.Message)
+	assert.Len(t, data, 2)
+	assert.Equal(t, "Teclado", data[0].Nombre)
+	assert.Equal(t, 99.99, data[0].Precio)
+	assert.Equal(t, "Mouse", data[1].Nombre)
+	assert.Equal(t, 49.50, data[1].Precio)
 	assert.NoError(t, mock.ExpectationsWereMet())
 }
 
@@ -277,15 +317,19 @@ func TestObtenerProductoPorID_Exito(t *testing.T) {
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
-	var response models.Producto
-	err := json.Unmarshal(w.Body.Bytes(), &response)
+	response := decodeAPIResponse(t, w.Body.Bytes())
+
+	var data models.Producto
+	err := json.Unmarshal(response.Data, &data)
 	assert.NoError(t, err)
 
 	assert.Equal(t, http.StatusOK, w.Code)
-	assert.Equal(t, uuid.MustParse(productoID), response.ID)
-	assert.Equal(t, "Monitor", response.Nombre)
-	assert.Equal(t, "4K", response.Descripcion)
-	assert.Equal(t, 299.90, response.Precio)
+	assert.Equal(t, "success", response.Status)
+	assert.Equal(t, "Datos recuperados correctamente", response.Message)
+	assert.Equal(t, uuid.MustParse(productoID), data.ID)
+	assert.Equal(t, "Monitor", data.Nombre)
+	assert.Equal(t, "4K", data.Descripcion)
+	assert.Equal(t, 299.90, data.Precio)
 	assert.NoError(t, mock.ExpectationsWereMet())
 }
 
@@ -298,12 +342,12 @@ func TestObtenerProductoPorID_IDInvalido(t *testing.T) {
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
-	var response map[string]string
-	err := json.Unmarshal(w.Body.Bytes(), &response)
-	assert.NoError(t, err)
+	response := decodeAPIResponse(t, w.Body.Bytes())
 
 	assert.Equal(t, http.StatusBadRequest, w.Code)
-	assert.Equal(t, "id inválido", response["error"])
+	assert.Equal(t, "error", response.Status)
+	assert.Equal(t, string(apierrors.InvalidParam), response.Error.Code)
+	assert.Equal(t, "id inválido", response.Error.Message)
 }
 
 func TestObtenerProductoPorID_NoEncontrado(t *testing.T) {
@@ -323,12 +367,12 @@ func TestObtenerProductoPorID_NoEncontrado(t *testing.T) {
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
-	var response map[string]string
-	err := json.Unmarshal(w.Body.Bytes(), &response)
-	assert.NoError(t, err)
+	response := decodeAPIResponse(t, w.Body.Bytes())
 
 	assert.Equal(t, http.StatusNotFound, w.Code)
-	assert.Equal(t, "producto no encontrado", response["error"])
+	assert.Equal(t, "error", response.Status)
+	assert.Equal(t, string(apierrors.NotFound), response.Error.Code)
+	assert.Equal(t, "producto no encontrado", response.Error.Message)
 	assert.NoError(t, mock.ExpectationsWereMet())
 }
 
@@ -343,12 +387,12 @@ func TestObtenerProductos_DBNoInicializada(t *testing.T) {
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
-	var response map[string]string
-	err := json.Unmarshal(w.Body.Bytes(), &response)
-	assert.NoError(t, err)
+	response := decodeAPIResponse(t, w.Body.Bytes())
 
 	assert.Equal(t, http.StatusInternalServerError, w.Code)
-	assert.Equal(t, "database is not initialized", response["error"])
+	assert.Equal(t, "error", response.Status)
+	assert.Equal(t, string(apierrors.DBNotInitialized), response.Error.Code)
+	assert.Equal(t, "database is not initialized", response.Error.Message)
 }
 
 func TestObtenerProductoPorID_DBNoInicializada(t *testing.T) {
@@ -362,12 +406,12 @@ func TestObtenerProductoPorID_DBNoInicializada(t *testing.T) {
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
-	var response map[string]string
-	err := json.Unmarshal(w.Body.Bytes(), &response)
-	assert.NoError(t, err)
+	response := decodeAPIResponse(t, w.Body.Bytes())
 
 	assert.Equal(t, http.StatusInternalServerError, w.Code)
-	assert.Equal(t, "database is not initialized", response["error"])
+	assert.Equal(t, "error", response.Status)
+	assert.Equal(t, string(apierrors.DBNotInitialized), response.Error.Code)
+	assert.Equal(t, "database is not initialized", response.Error.Message)
 }
 
 func TestObtenerProductos_ErrorDB(t *testing.T) {
@@ -384,12 +428,12 @@ func TestObtenerProductos_ErrorDB(t *testing.T) {
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
-	var response map[string]string
-	err := json.Unmarshal(w.Body.Bytes(), &response)
-	assert.NoError(t, err)
+	response := decodeAPIResponse(t, w.Body.Bytes())
 
 	assert.Equal(t, http.StatusInternalServerError, w.Code)
-	assert.Equal(t, "db failure", response["error"])
+	assert.Equal(t, "error", response.Status)
+	assert.Equal(t, string(apierrors.Database), response.Error.Code)
+	assert.Equal(t, "db failure", response.Error.Message)
 	assert.NoError(t, mock.ExpectationsWereMet())
 }
 
@@ -408,12 +452,12 @@ func TestObtenerProductoPorID_ErrorDB(t *testing.T) {
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
-	var response map[string]string
-	err := json.Unmarshal(w.Body.Bytes(), &response)
-	assert.NoError(t, err)
+	response := decodeAPIResponse(t, w.Body.Bytes())
 
 	assert.Equal(t, http.StatusInternalServerError, w.Code)
-	assert.Equal(t, "db failure", response["error"])
+	assert.Equal(t, "error", response.Status)
+	assert.Equal(t, string(apierrors.Database), response.Error.Code)
+	assert.Equal(t, "db failure", response.Error.Message)
 	assert.NoError(t, mock.ExpectationsWereMet())
 }
 
@@ -441,12 +485,16 @@ func TestEliminarProducto_Exito(t *testing.T) {
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
-	var response map[string]string
-	err := json.Unmarshal(w.Body.Bytes(), &response)
+	response := decodeAPIResponse(t, w.Body.Bytes())
+
+	var data map[string]bool
+	err := json.Unmarshal(response.Data, &data)
 	assert.NoError(t, err)
 
 	assert.Equal(t, http.StatusOK, w.Code)
-	assert.Equal(t, "producto eliminado", response["message"])
+	assert.Equal(t, "success", response.Status)
+	assert.Equal(t, "Recurso eliminado correctamente", response.Message)
+	assert.Equal(t, true, data["deleted"])
 	assert.NoError(t, mock.ExpectationsWereMet())
 }
 
@@ -459,12 +507,12 @@ func TestEliminarProducto_IDInvalido(t *testing.T) {
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
-	var response map[string]string
-	err := json.Unmarshal(w.Body.Bytes(), &response)
-	assert.NoError(t, err)
+	response := decodeAPIResponse(t, w.Body.Bytes())
 
 	assert.Equal(t, http.StatusBadRequest, w.Code)
-	assert.Equal(t, "id inválido", response["error"])
+	assert.Equal(t, "error", response.Status)
+	assert.Equal(t, string(apierrors.InvalidParam), response.Error.Code)
+	assert.Equal(t, "id inválido", response.Error.Message)
 }
 
 func TestEliminarProducto_NoEncontrado(t *testing.T) {
@@ -483,12 +531,12 @@ func TestEliminarProducto_NoEncontrado(t *testing.T) {
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
-	var response map[string]string
-	err := json.Unmarshal(w.Body.Bytes(), &response)
-	assert.NoError(t, err)
+	response := decodeAPIResponse(t, w.Body.Bytes())
 
 	assert.Equal(t, http.StatusNotFound, w.Code)
-	assert.Equal(t, "producto no encontrado", response["error"])
+	assert.Equal(t, "error", response.Status)
+	assert.Equal(t, string(apierrors.NotFound), response.Error.Code)
+	assert.Equal(t, "producto no encontrado", response.Error.Message)
 	assert.NoError(t, mock.ExpectationsWereMet())
 }
 
@@ -507,11 +555,11 @@ func TestEliminarProducto_ErrorDB(t *testing.T) {
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
-	var response map[string]string
-	err := json.Unmarshal(w.Body.Bytes(), &response)
-	assert.NoError(t, err)
+	response := decodeAPIResponse(t, w.Body.Bytes())
 
 	assert.Equal(t, http.StatusInternalServerError, w.Code)
-	assert.Equal(t, "db failure", response["error"])
+	assert.Equal(t, "error", response.Status)
+	assert.Equal(t, string(apierrors.Database), response.Error.Code)
+	assert.Equal(t, "db failure", response.Error.Message)
 	assert.NoError(t, mock.ExpectationsWereMet())
 }

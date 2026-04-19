@@ -99,9 +99,32 @@ curl http://localhost:8082/api/v1/productos
 curl http://localhost:8082/api/v1/productos/<uuid>
 ```
 
+## Catalogo de codigos de error
+
+El catalogo oficial de codigos de error esta documentado en:
+
+- `docs/error-codes.md`
+
+Fuente de verdad en codigo:
+
+- `api/errors/codes.go`
+- `api/response/response.go`
+
+Codigos actuales:
+
+- `DB_NOT_INITIALIZED` (500)
+- `DATABASE_ERROR` (500)
+- `INVALID_PARAMETER` (400)
+- `VALIDATION_ERROR` (400)
+- `RESOURCE_NOT_FOUND` (404)
+
 ## Resumen de testing
 
 Actualmente se cubre el flujo del controlador de productos con pruebas en `controllers/producto_controller_test.go`:
+
+Estado actual:
+
+- Validacion manual confirmada: los tests del controlador pasan despues del refactor a `api/errors` y `api/response`.
 
 - Crear producto: exito y validacion fallida
 - Obtener productos: exito, error DB y DB no inicializada
@@ -154,7 +177,7 @@ go vet ./...
 Instalar golangci-lint (si no esta instalado):
 
 ```bash
-brew install golangci-lint
+go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
 ```
 
 Ejecutar golangci-lint:
@@ -172,6 +195,11 @@ golangci-lint run ./...
 ├── .env.example
 ├── .gitignore
 ├── README.md
+├── api/
+│   ├── errors/
+│   │   └── codes.go
+│   └── response/
+│       └── response.go
 ├── config/
 │   └── db.go
 ├── controllers/
