@@ -77,6 +77,70 @@ curl http://localhost:8082/api/v1/productos
 curl http://localhost:8082/api/v1/productos/<uuid>
 ```
 
+## Resumen de testing
+
+Actualmente se cubre el flujo del controlador de productos con pruebas en `controllers/producto_controller_test.go`:
+
+- Crear producto: exito y validacion fallida
+- Obtener productos: exito, error DB y DB no inicializada
+- Obtener producto por ID: exito, ID invalido, no encontrado, error DB y DB no inicializada
+- Actualizar producto: exito, ID invalido, no encontrado, payload invalido y error DB
+- Eliminar producto: exito, ID invalido, no encontrado y error DB
+
+## Comandos de testing y coverage
+
+Ejecutar todos los tests:
+
+```bash
+go test ./...
+```
+
+Ejecutar solo tests del controlador de productos:
+
+```bash
+go test ./controllers -v
+```
+
+Generar reporte de coverage:
+
+```bash
+go test ./... -coverprofile=coverage.out
+go tool cover -func=coverage.out
+go tool cover -html=coverage.out
+```
+
+Ejecutar tests excluyendo carpetas (ejemplo: `tmp`):
+
+```bash
+go list ./... | grep -vE '/tmp($|/)' | xargs go test
+```
+
+## Comandos para linters
+
+Formatear codigo con gofmt:
+
+```bash
+gofmt -w .
+```
+
+Analisis estatico con go vet:
+
+```bash
+go vet ./...
+```
+
+Instalar golangci-lint (si no esta instalado):
+
+```bash
+brew install golangci-lint
+```
+
+Ejecutar golangci-lint:
+
+```bash
+golangci-lint run ./...
+```
+
 ## Estructura del proyecto
 
 ```text
@@ -89,13 +153,15 @@ curl http://localhost:8082/api/v1/productos/<uuid>
 ├── config/
 │   └── db.go
 ├── controllers/
-│   └── producto_controller.go
+│   ├── producto_controller.go
+│   └── producto_controller_test.go
 ├── models/
 │   └── producto.go
 ├── docker-compose.yml
 ├── main.go
 ├── go.mod
 ├── go.sum
+├── coverage.out
 └── tmp/
 ```
 

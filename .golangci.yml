@@ -1,0 +1,12 @@
+linters:
+  enable:
+    - errcheck    # Verifica errores no manejados
+    - gosimple    # Sugiere simplificaciones de código
+    - govet       # Análisis estático estándar
+    - staticcheck # El linter más completo actualmente
+    - unused      # Detecta variables/funciones sin uso
+    - revive      # Reemplazo moderno de golint (estilo)
+    - bodyclose   # Verifica que cierres los cuerpos de respuestas HTTP (vital en Gin)
+
+run:
+  timeout: 5m
