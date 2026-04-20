@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"os"
 
+	"backend-productos/models"
+
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 )
@@ -28,6 +30,15 @@ func InitDB() error {
 	}
 
 	DB = db
+
+	if err := DB.Exec("CREATE EXTENSION IF NOT EXISTS pgcrypto").Error; err != nil {
+		return fmt.Errorf("error al habilitar extension pgcrypto: %w", err)
+	}
+
+	if err := DB.AutoMigrate(&models.Producto{}); err != nil {
+		return fmt.Errorf("error al ejecutar migraciones: %w", err)
+	}
+
 	return nil
 }
 

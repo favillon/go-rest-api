@@ -6,7 +6,6 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
-	"strings"
 	"testing"
 	"time"
 
@@ -22,6 +21,16 @@ import (
 	"gorm.io/gorm"
 )
 
+// setDBForTest assigns config.DB for a test and restores previous state at cleanup.
+func setDBForTest(t *testing.T, db *gorm.DB) {
+	t.Helper()
+	previousDB := config.DB
+	config.DB = db
+	t.Cleanup(func() {
+		config.DB = previousDB
+	})
+}
+
 // SetupTestDB crea una conexión GORM mockeada para no tocar la DB real
 func SetupTestDB(t *testing.T) (*gorm.DB, sqlmock.Sqlmock) {
 	dbMock, mock, err := sqlmock.New()
@@ -32,6 +41,9 @@ func SetupTestDB(t *testing.T) (*gorm.DB, sqlmock.Sqlmock) {
 	})
 	db, err := gorm.Open(dialector, &gorm.Config{})
 	assert.NoError(t, err)
+	t.Cleanup(func() {
+		_ = dbMock.Close()
+	})
 
 	return db, mock
 }
@@ -62,7 +74,7 @@ func TestCrearProducto_Exito(t *testing.T) {
 	// 1. Arrange (Preparar)
 	gin.SetMode(gin.TestMode)
 	db, mock := SetupTestDB(t)
-	config.DB = db // Inyectamos el mock en la config global
+	setDBForTest(t, db) // Inyectamos el mock en la config global
 
 	r := gin.Default()
 	r.POST("/productos", CrearProducto)
@@ -115,13 +127,44 @@ func TestCrearProducto_ValidacionFallida(t *testing.T) {
 	assert.Equal(t, "error", response.Status)
 	assert.Equal(t, "La solicitud contiene datos inválidos", response.Message)
 	assert.Equal(t, string(apierrors.Validation), response.Error.Code)
-	assert.Contains(t, response.Error.Message, "Nombre")
+	assert.Equal(t, "invalid request payload", response.Error.Message)
+}
+
+func TestCrearProducto_ErrorDBCreate(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	db, mock := SetupTestDB(t)
+	setDBForTest(t, db)
+
+	r := gin.Default()
+	r.POST("/productos", CrearProducto)
+
+	productoReq := models.Producto{
+		Nombre: "Producto Test",
+		Precio: 10.50,
+	}
+	jsonValue, _ := json.Marshal(productoReq)
+
+	mock.ExpectBegin()
+	mock.ExpectQuery(`INSERT INTO "productos"`).WillReturnError(errors.New("db failure"))
+	mock.ExpectRollback()
+
+	req, _ := http.NewRequest("POST", "/productos", bytes.NewBuffer(jsonValue))
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	response := decodeAPIResponse(t, w.Body.Bytes())
+
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+	assert.Equal(t, "error", response.Status)
+	assert.Equal(t, string(apierrors.Database), response.Error.Code)
+	assert.Equal(t, "internal server error", response.Error.Message)
+	assert.NoError(t, mock.ExpectationsWereMet())
 }
 
 func TestActualizarProducto_Exito(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	db, mock := SetupTestDB(t)
-	config.DB = db
+	setDBForTest(t, db)
 
 	r := gin.Default()
 	r.PUT("/productos/:id", ActualizarProducto)
@@ -181,7 +224,7 @@ func TestActualizarProducto_IDInvalido(t *testing.T) {
 func TestActualizarProducto_NoEncontrado(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	db, mock := SetupTestDB(t)
-	config.DB = db
+	setDBForTest(t, db)
 
 	r := gin.Default()
 	r.PUT("/productos/:id", ActualizarProducto)
@@ -208,7 +251,7 @@ func TestActualizarProducto_NoEncontrado(t *testing.T) {
 func TestActualizarProducto_PayloadInvalido(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	db, mock := SetupTestDB(t)
-	config.DB = db
+	setDBForTest(t, db)
 
 	r := gin.Default()
 	r.PUT("/productos/:id", ActualizarProducto)
@@ -231,17 +274,14 @@ func TestActualizarProducto_PayloadInvalido(t *testing.T) {
 	assert.Equal(t, http.StatusBadRequest, w.Code)
 	assert.Equal(t, "error", response.Status)
 	assert.Equal(t, string(apierrors.Validation), response.Error.Code)
-	assert.True(t,
-		strings.Contains(response.Error.Message, "invalid character") ||
-			strings.Contains(response.Error.Message, "unexpected EOF"),
-	)
+	assert.Equal(t, "invalid request payload", response.Error.Message)
 	assert.NoError(t, mock.ExpectationsWereMet())
 }
 
 func TestActualizarProducto_ErrorDB(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	db, mock := SetupTestDB(t)
-	config.DB = db
+	setDBForTest(t, db)
 
 	r := gin.Default()
 	r.PUT("/productos/:id", ActualizarProducto)
@@ -259,14 +299,47 @@ func TestActualizarProducto_ErrorDB(t *testing.T) {
 	assert.Equal(t, http.StatusInternalServerError, w.Code)
 	assert.Equal(t, "error", response.Status)
 	assert.Equal(t, string(apierrors.Database), response.Error.Code)
-	assert.Equal(t, "db failure", response.Error.Message)
+	assert.Equal(t, "internal server error", response.Error.Message)
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestActualizarProducto_ErrorDBUpdate(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	db, mock := SetupTestDB(t)
+	setDBForTest(t, db)
+
+	r := gin.Default()
+	r.PUT("/productos/:id", ActualizarProducto)
+
+	productoID := "550e8400-e29b-41d4-a716-446655440004"
+	now := time.Now()
+
+	mock.ExpectQuery(`SELECT .* FROM "productos"`).
+		WillReturnRows(sqlmock.NewRows([]string{"id", "nombre", "descripcion", "precio", "created_at", "updated_at", "deleted_at"}).
+			AddRow(productoID, "Producto viejo", "Descripcion vieja", 10.50, now, now, nil))
+
+	mock.ExpectBegin()
+	mock.ExpectExec(`UPDATE "productos"`).WillReturnError(errors.New("db failure"))
+	mock.ExpectRollback()
+
+	payload := []byte(`{"nombre":"Producto actualizado","descripcion":"Descripcion nueva","precio":20.75}`)
+	req, _ := http.NewRequest("PUT", "/productos/"+productoID, bytes.NewBuffer(payload))
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	response := decodeAPIResponse(t, w.Body.Bytes())
+
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+	assert.Equal(t, "error", response.Status)
+	assert.Equal(t, string(apierrors.Database), response.Error.Code)
+	assert.Equal(t, "internal server error", response.Error.Message)
 	assert.NoError(t, mock.ExpectationsWereMet())
 }
 
 func TestObtenerProductos_Exito(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	db, mock := SetupTestDB(t)
-	config.DB = db
+	setDBForTest(t, db)
 
 	r := gin.Default()
 	r.GET("/productos", ObtenerProductos)
@@ -301,7 +374,7 @@ func TestObtenerProductos_Exito(t *testing.T) {
 func TestObtenerProductoPorID_Exito(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	db, mock := SetupTestDB(t)
-	config.DB = db
+	setDBForTest(t, db)
 
 	r := gin.Default()
 	r.GET("/productos/:id", ObtenerProductoPorID)
@@ -335,6 +408,9 @@ func TestObtenerProductoPorID_Exito(t *testing.T) {
 
 func TestObtenerProductoPorID_IDInvalido(t *testing.T) {
 	gin.SetMode(gin.TestMode)
+	db, _ := SetupTestDB(t)
+	setDBForTest(t, db)
+
 	r := gin.Default()
 	r.GET("/productos/:id", ObtenerProductoPorID)
 
@@ -353,7 +429,7 @@ func TestObtenerProductoPorID_IDInvalido(t *testing.T) {
 func TestObtenerProductoPorID_NoEncontrado(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	db, mock := SetupTestDB(t)
-	config.DB = db
+	setDBForTest(t, db)
 
 	r := gin.Default()
 	r.GET("/productos/:id", ObtenerProductoPorID)
@@ -378,7 +454,7 @@ func TestObtenerProductoPorID_NoEncontrado(t *testing.T) {
 
 func TestObtenerProductos_DBNoInicializada(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	config.DB = nil
+	setDBForTest(t, nil)
 
 	r := gin.Default()
 	r.GET("/productos", ObtenerProductos)
@@ -397,7 +473,7 @@ func TestObtenerProductos_DBNoInicializada(t *testing.T) {
 
 func TestObtenerProductoPorID_DBNoInicializada(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	config.DB = nil
+	setDBForTest(t, nil)
 
 	r := gin.Default()
 	r.GET("/productos/:id", ObtenerProductoPorID)
@@ -417,7 +493,7 @@ func TestObtenerProductoPorID_DBNoInicializada(t *testing.T) {
 func TestObtenerProductos_ErrorDB(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	db, mock := SetupTestDB(t)
-	config.DB = db
+	setDBForTest(t, db)
 
 	r := gin.Default()
 	r.GET("/productos", ObtenerProductos)
@@ -433,14 +509,14 @@ func TestObtenerProductos_ErrorDB(t *testing.T) {
 	assert.Equal(t, http.StatusInternalServerError, w.Code)
 	assert.Equal(t, "error", response.Status)
 	assert.Equal(t, string(apierrors.Database), response.Error.Code)
-	assert.Equal(t, "db failure", response.Error.Message)
+	assert.Equal(t, "internal server error", response.Error.Message)
 	assert.NoError(t, mock.ExpectationsWereMet())
 }
 
 func TestObtenerProductoPorID_ErrorDB(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	db, mock := SetupTestDB(t)
-	config.DB = db
+	setDBForTest(t, db)
 
 	r := gin.Default()
 	r.GET("/productos/:id", ObtenerProductoPorID)
@@ -457,14 +533,14 @@ func TestObtenerProductoPorID_ErrorDB(t *testing.T) {
 	assert.Equal(t, http.StatusInternalServerError, w.Code)
 	assert.Equal(t, "error", response.Status)
 	assert.Equal(t, string(apierrors.Database), response.Error.Code)
-	assert.Equal(t, "db failure", response.Error.Message)
+	assert.Equal(t, "internal server error", response.Error.Message)
 	assert.NoError(t, mock.ExpectationsWereMet())
 }
 
 func TestEliminarProducto_Exito(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	db, mock := SetupTestDB(t)
-	config.DB = db
+	setDBForTest(t, db)
 
 	r := gin.Default()
 	r.DELETE("/productos/:id", EliminarProducto)
@@ -518,7 +594,7 @@ func TestEliminarProducto_IDInvalido(t *testing.T) {
 func TestEliminarProducto_NoEncontrado(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	db, mock := SetupTestDB(t)
-	config.DB = db
+	setDBForTest(t, db)
 
 	r := gin.Default()
 	r.DELETE("/productos/:id", EliminarProducto)
@@ -543,7 +619,7 @@ func TestEliminarProducto_NoEncontrado(t *testing.T) {
 func TestEliminarProducto_ErrorDB(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	db, mock := SetupTestDB(t)
-	config.DB = db
+	setDBForTest(t, db)
 
 	r := gin.Default()
 	r.DELETE("/productos/:id", EliminarProducto)
@@ -560,6 +636,38 @@ func TestEliminarProducto_ErrorDB(t *testing.T) {
 	assert.Equal(t, http.StatusInternalServerError, w.Code)
 	assert.Equal(t, "error", response.Status)
 	assert.Equal(t, string(apierrors.Database), response.Error.Code)
-	assert.Equal(t, "db failure", response.Error.Message)
+	assert.Equal(t, "internal server error", response.Error.Message)
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestEliminarProducto_ErrorDBDelete(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	db, mock := SetupTestDB(t)
+	setDBForTest(t, db)
+
+	r := gin.Default()
+	r.DELETE("/productos/:id", EliminarProducto)
+
+	productoID := "550e8400-e29b-41d4-a716-446655440033"
+	now := time.Now()
+
+	mock.ExpectQuery(`SELECT .* FROM "productos"`).
+		WillReturnRows(sqlmock.NewRows([]string{"id", "nombre", "descripcion", "precio", "created_at", "updated_at", "deleted_at"}).
+			AddRow(productoID, "Camara", "HD", 149.99, now, now, nil))
+
+	mock.ExpectBegin()
+	mock.ExpectExec(`UPDATE "productos"`).WillReturnError(errors.New("db failure"))
+	mock.ExpectRollback()
+
+	req, _ := http.NewRequest("DELETE", "/productos/"+productoID, nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	response := decodeAPIResponse(t, w.Body.Bytes())
+
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+	assert.Equal(t, "error", response.Status)
+	assert.Equal(t, string(apierrors.Database), response.Error.Code)
+	assert.Equal(t, "internal server error", response.Error.Message)
 	assert.NoError(t, mock.ExpectationsWereMet())
 }

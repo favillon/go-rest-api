@@ -6,7 +6,6 @@ import (
 	"os"
 
 	"backend-productos/config"
-	"backend-productos/controllers"
 
 	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
@@ -33,15 +32,7 @@ func main() {
 	}()
 
 	r := gin.Default()
-
-	api := r.Group("/api/v1")
-	{
-		api.GET("/productos", controllers.ObtenerProductos)
-		api.GET("/productos/:id", controllers.ObtenerProductoPorID)
-		api.POST("/productos", controllers.CrearProducto)
-		api.PUT("/productos/:id", controllers.ActualizarProducto)
-		api.DELETE("/productos/:id", controllers.EliminarProducto)
-	}
+	registerRoutes(r)
 
 	fmt.Println("✓ backend-productos iniciado")
 	fmt.Println("✓ Conexión a PostgreSQL exitosa")

@@ -2,6 +2,7 @@ package controllers
 
 import (
 	"errors"
+	"log"
 	"net/http"
 
 	apierrors "backend-productos/api/errors"
@@ -14,6 +15,11 @@ import (
 	"gorm.io/gorm"
 )
 
+const (
+	publicDatabaseErrorDetail   = "internal server error"
+	publicValidationErrorDetail = "invalid request payload"
+)
+
 // Listar todos
 func ObtenerProductos(c *gin.Context) {
 	if config.DB == nil {
@@ -23,7 +29,8 @@ func ObtenerProductos(c *gin.Context) {
 
 	var productos []models.Producto
 	if err := config.DB.Find(&productos).Error; err != nil {
-		apiresponse.RespondError(c, http.StatusInternalServerError, "No fue posible obtener los productos", apierrors.Database, err.Error())
+		log.Printf("database error in ObtenerProductos: %v", err)
+		apiresponse.RespondError(c, http.StatusInternalServerError, "No fue posible obtener los productos", apierrors.Database, publicDatabaseErrorDetail)
 		return
 	}
 
@@ -50,7 +57,8 @@ func ObtenerProductoPorID(c *gin.Context) {
 			return
 		}
 
-		apiresponse.RespondError(c, http.StatusInternalServerError, "No fue posible obtener el producto", apierrors.Database, err.Error())
+		log.Printf("database error in ObtenerProductoPorID: %v", err)
+		apiresponse.RespondError(c, http.StatusInternalServerError, "No fue posible obtener el producto", apierrors.Database, publicDatabaseErrorDetail)
 		return
 	}
 
@@ -61,10 +69,15 @@ func ObtenerProductoPorID(c *gin.Context) {
 func CrearProducto(c *gin.Context) {
 	var input models.Producto
 	if err := c.ShouldBindJSON(&input); err != nil {
-		apiresponse.RespondError(c, http.StatusBadRequest, "La solicitud contiene datos inválidos", apierrors.Validation, err.Error())
+		log.Printf("validation error in CrearProducto: %v", err)
+		apiresponse.RespondError(c, http.StatusBadRequest, "La solicitud contiene datos inválidos", apierrors.Validation, publicValidationErrorDetail)
 		return
 	}
-	config.DB.Create(&input)
+	if err := config.DB.Create(&input).Error; err != nil {
+		log.Printf("database error in CrearProducto: %v", err)
+		apiresponse.RespondError(c, http.StatusInternalServerError, "No fue posible crear el producto", apierrors.Database, publicDatabaseErrorDetail)
+		return
+	}
 	apiresponse.RespondSuccess(c, http.StatusCreated, "Recurso creado correctamente", input)
 }
 
@@ -83,17 +96,23 @@ func ActualizarProducto(c *gin.Context) {
 			return
 		}
 
-		apiresponse.RespondError(c, http.StatusInternalServerError, "No fue posible actualizar el producto", apierrors.Database, err.Error())
+		log.Printf("database error loading producto in ActualizarProducto: %v", err)
+		apiresponse.RespondError(c, http.StatusInternalServerError, "No fue posible actualizar el producto", apierrors.Database, publicDatabaseErrorDetail)
 		return
 	}
 
 	var input models.Producto
 	if err := c.ShouldBindJSON(&input); err != nil {
-		apiresponse.RespondError(c, http.StatusBadRequest, "La solicitud contiene datos inválidos", apierrors.Validation, err.Error())
+		log.Printf("validation error in ActualizarProducto: %v", err)
+		apiresponse.RespondError(c, http.StatusBadRequest, "La solicitud contiene datos inválidos", apierrors.Validation, publicValidationErrorDetail)
 		return
 	}
 
-	config.DB.Model(&producto).Updates(input)
+	if err := config.DB.Model(&producto).Updates(input).Error; err != nil {
+		log.Printf("database error updating producto in ActualizarProducto: %v", err)
+		apiresponse.RespondError(c, http.StatusInternalServerError, "No fue posible actualizar el producto", apierrors.Database, publicDatabaseErrorDetail)
+		return
+	}
 	apiresponse.RespondSuccess(c, http.StatusOK, "Recurso actualizado correctamente", producto)
 }
 
@@ -112,10 +131,15 @@ func EliminarProducto(c *gin.Context) {
 			return
 		}
 
-		apiresponse.RespondError(c, http.StatusInternalServerError, "No fue posible eliminar el producto", apierrors.Database, err.Error())
+		log.Printf("database error loading producto in EliminarProducto: %v", err)
+		apiresponse.RespondError(c, http.StatusInternalServerError, "No fue posible eliminar el producto", apierrors.Database, publicDatabaseErrorDetail)
 		return
 	}
 
-	config.DB.Delete(&producto)
+	if err := config.DB.Delete(&producto).Error; err != nil {
+		log.Printf("database error deleting producto in EliminarProducto: %v", err)
+		apiresponse.RespondError(c, http.StatusInternalServerError, "No fue posible eliminar el producto", apierrors.Database, publicDatabaseErrorDetail)
+		return
+	}
 	apiresponse.RespondSuccess(c, http.StatusOK, "Recurso eliminado correctamente", gin.H{"deleted": true})
 }
