@@ -1,0 +1,15 @@
+.env
+.env.local
+.env.*.local
+.env.example
+.git
+.gitignore
+.vscode
+tmp/
+coverage.out
+*.log
+docs/
+README.md
+.gitkeep
+
+

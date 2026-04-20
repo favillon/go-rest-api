@@ -33,6 +33,7 @@ Variables usadas:
 - `PORT_APP`: puerto donde corre la API (default: `8082`)
 - `POSTGRES_HOST`: host de PostgreSQL (default: `localhost`)
 - `POSTGRES_PORT`: puerto de PostgreSQL (default: `5432`)
+- `POSTGRES_HOST_PORT`: puerto expuesto en el host para PostgreSQL (default: `5432`)
 - `POSTGRES_DB`: nombre de la base de datos
 - `POSTGRES_USER`: usuario de PostgreSQL
 - `POSTGRES_PASSWORD`: password de PostgreSQL
@@ -43,6 +44,7 @@ Ejemplo (`.env.example`):
 PORT_APP=8082
 POSTGRES_HOST=localhost
 POSTGRES_PORT=5432
+POSTGRES_HOST_PORT=5432
 POSTGRES_DB=restapi_go_db
 POSTGRES_USER=user_go
 POSTGRES_PASSWORD=change_me
@@ -52,7 +54,7 @@ POSTGRES_PASSWORD=change_me
 
 El archivo `docker-compose.yml` levanta PostgreSQL 18 y mapea el puerto:
 
-- `5432:${POSTGRES_PORT}`
+- `${POSTGRES_HOST_PORT:-5432}:5432`
 
 Comandos utiles:
 
@@ -160,6 +162,107 @@ Ejecutar tests excluyendo carpetas (ejemplo: `tmp`):
 go list ./... | grep -vE '/tmp($|/)' | xargs go test
 ```
 
+### Dentro del contenedor de desarrollo (servicio app)
+
+Si estas usando Docker Compose con el contenedor de desarrollo, ejecuta los tests dentro del contenedor:
+
+```bash
+docker compose exec app go test ./...
+docker compose exec app go test ./controllers -v
+docker compose exec app go test ./... -coverprofile=coverage.out
+docker compose exec app go tool cover -func=coverage.out
+docker compose exec app go tool cover -html=coverage.out
+docker compose exec app go list ./... | grep -vE '/tmp($|/)' | xargs go test
+```
+
+## Docker: Desarrollo y Producción
+
+### Opción 1: Desarrollo con Docker Compose (Hot Reload)
+
+Levantar la aplicación y PostgreSQL con recarga automática usando Air:
+
+```bash
+docker compose --env-file .env.docker up --build
+```
+
+Esto ejecuta:
+- **PostgreSQL**: en el puerto del host definido por `POSTGRES_HOST_PORT`
+- **App con Air** (Dockerfile.dev): en puerto `8082`, recarga automática en cambios de código
+
+Ver logs en vivo:
+
+```bash
+docker compose logs -f app
+```
+
+Para detener:
+
+```bash
+docker compose down
+```
+
+### Opción 2: Producción - Imagen Optimizada
+
+Compilar la imagen multietapa de producción (sin Air, binario optimizado):
+
+```bash
+# Build
+docker build -t backend-productos:latest .
+
+# Run (requiere PostgreSQL externo o Compose sin volumen)
+docker run \
+  -e POSTGRES_HOST=postgres \
+  -e POSTGRES_USER=admin \
+  -e POSTGRES_PASSWORD=secret \
+  -e POSTGRES_DB=productos \
+  -p 8082:8082 \
+  backend-productos:latest
+```
+
+La imagen final de producción:
+- Tamaño: ~5-10 MB (solo binario compilado)
+- Sin código fuente ni herramientas de desarrollo (sin Air)
+- Segura para despliegue en producción
+
+### Estructura de Dockerfiles
+
+- **Dockerfile**: Multietapa para producción
+  - Etapa 1: golang:1.21-alpine, compila el binario
+  - Etapa 2: alpine:3.18, solo binario, ~5-10 MB, listo para prod
+  
+- **Dockerfile.dev**: Para desarrollo con Air
+  - golang:1.21-alpine + Air preinstalado
+  - Recarga automática en cambios de código
+  - Volumen montado del código fuente
+
+### .env requerido para Docker
+
+Para desarrollo local, usa `.env`:
+
+```env
+POSTGRES_USER=user_go
+POSTGRES_PASSWORD=P4ssW0rS3cr3t
+POSTGRES_DB=restapi_go_db
+PORT_APP=8082
+POSTGRES_HOST=localhost
+POSTGRES_PORT=5432
+POSTGRES_HOST_PORT=5432
+```
+
+Para desarrollo en Docker, existe `.env.docker` (cargado automáticamente en contenedor):
+
+```env
+POSTGRES_USER=user_go
+POSTGRES_PASSWORD=P4ssW0rS3cr3t
+POSTGRES_DB=restapi_go_db
+PORT_APP=8082
+POSTGRES_HOST=postgres
+POSTGRES_PORT=5432
+POSTGRES_HOST_PORT=5432
+```
+
+Ver `.env.example` para más detalles.
+
 ## Comandos para linters
 
 Formatear codigo con gofmt:
@@ -184,6 +287,14 @@ Ejecutar golangci-lint:
 
 ```bash
 golangci-lint run ./...
+```
+
+### Dentro del contenedor de desarrollo (servicio app)
+
+```bash
+docker compose exec app gofmt -w .
+docker compose exec app go vet ./...
+docker compose exec app golangci-lint run ./...
 ```
 
 ## Estructura del proyecto

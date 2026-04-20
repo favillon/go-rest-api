@@ -4,13 +4,43 @@ services:
     container_name: backend-productos-postgres
     restart: unless-stopped
     ports:
-      - "5432:${POSTGRES_PORT}"
+      - "${POSTGRES_HOST_PORT:-5432}:5432"
     environment:
       POSTGRES_DB: ${POSTGRES_DB}
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
     volumes:
       - postgres_data_go:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    container_name: backend-productos-app
+    restart: unless-stopped
+    ports:
+      - "${PORT_APP:-8082}:8082"
+    environment:
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+      PORT_APP: 8082
+    env_file:
+      - .env.docker
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - .:/app
+    stdin_open: true
+    tty: true
 
 volumes:
   postgres_data_go:

@@ -12,6 +12,7 @@ var DB *gorm.DB
 
 func InitDB() error {
 
+	// In Docker: use service name "postgres"; locally: use "localhost"
 	dbHost := getEnv("POSTGRES_HOST", "localhost")
 	dbPort := getEnv("POSTGRES_PORT", "5432")
 	dbUser := os.Getenv("POSTGRES_USER")
@@ -29,7 +30,6 @@ func InitDB() error {
 	DB = db
 	return nil
 }
-
 
 func getEnv(key, defaultValue string) string {
 	if value := os.Getenv(key); value != "" {

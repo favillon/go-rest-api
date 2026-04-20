@@ -13,8 +13,13 @@ import (
 )
 
 func main() {
-	if err := godotenv.Load(); err != nil {
-		log.Println("No .env file found, using system environment variables")
+	// Try to load .env.docker (for Docker environment)
+	// then .env (for local development)
+	// If neither exists, use system environment variables
+	if err := godotenv.Load(".env.docker"); err != nil {
+		if err := godotenv.Load(".env"); err != nil {
+			log.Println("No .env or .env.docker file found, using system environment variables")
+		}
 	}
 
 	if err := config.InitDB(); err != nil {

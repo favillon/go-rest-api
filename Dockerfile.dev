@@ -1,0 +1,26 @@
+# Development Dockerfile with Air for hot reload
+FROM golang:1.26.2-alpine3.22
+
+WORKDIR /app
+
+# Install Air (use version compatible with this Go toolchain)
+RUN go install github.com/cosmtrek/air@v1.43.0
+
+# Install golangci-lint for static analysis in the dev container
+RUN go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
+
+# Copy go mod and sum files (estos se descargaran de nuevo pero es cacheable)
+COPY go.mod go.sum ./
+
+# Download dependencies
+RUN go mod download
+
+# Copy .air.toml and .env.docker for Docker development
+COPY .air.toml .env.docker ./
+
+# Expose the port
+EXPOSE 8082
+
+# Run Air for hot reload
+# Air watches for file changes and rebuilds/restarts the app
+CMD ["air", "-c", ".air.toml"]
