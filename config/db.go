@@ -2,10 +2,12 @@ package config
 
 import (
 	"fmt"
+	"net/url"
 	"os"
 
 	"backend-productos/models"
 
+	"github.com/jackc/pgx/v5"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 )
@@ -21,8 +23,18 @@ func InitDB() error {
 	dbPassword := os.Getenv("POSTGRES_PASSWORD")
 	dbName := os.Getenv("POSTGRES_DB")
 
-	dsn := fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=disable",
-		dbHost, dbPort, dbUser, dbPassword, dbName)
+	// Construir DSN con componentes escapados para evitar inyección SQL
+	dsn := fmt.Sprintf("postgres://%s:%s@%s:%s/%s?sslmode=disable",
+		url.QueryEscape(dbUser),
+		url.QueryEscape(dbPassword),
+		dbHost,
+		dbPort,
+		dbName)
+
+	// Validar configuración con pgx.ParseConfig
+	if _, err := pgx.ParseConfig(dsn); err != nil {
+		return fmt.Errorf("error al parsear configuración de base de datos: %w", err)
+	}
 
 	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{})
 	if err != nil {

@@ -6,11 +6,12 @@ import "net/http"
 type Code string
 
 const (
-	DBNotInitialized Code = "DB_NOT_INITIALIZED"
-	Database         Code = "DATABASE_ERROR"
-	InvalidParam     Code = "INVALID_PARAMETER"
-	Validation       Code = "VALIDATION_ERROR"
-	NotFound         Code = "RESOURCE_NOT_FOUND"
+	DBNotInitialized  Code = "DB_NOT_INITIALIZED"
+	Database          Code = "DATABASE_ERROR"
+	InvalidParam      Code = "INVALID_PARAMETER"
+	Validation        Code = "VALIDATION_ERROR"
+	NotFound          Code = "RESOURCE_NOT_FOUND"
+	RateLimitExceeded Code = "RATE_LIMIT_EXCEEDED"
 )
 
 // Metadata describe cada codigo del catalogo.
@@ -40,5 +41,9 @@ var Catalog = map[Code]Metadata{
 	NotFound: {
 		HTTPStatus:  http.StatusNotFound,
 		Description: "El recurso solicitado no existe.",
+	},
+	RateLimitExceeded: {
+		HTTPStatus:  http.StatusTooManyRequests,
+		Description: "Se excedio el limite de solicitudes permitido.",
 	},
 }

@@ -371,6 +371,56 @@ func TestObtenerProductos_Exito(t *testing.T) {
 	assert.NoError(t, mock.ExpectationsWereMet())
 }
 
+func TestObtenerProductos_PaginacionConParametros(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	db, mock := SetupTestDB(t)
+	setDBForTest(t, db)
+
+	r := gin.Default()
+	r.GET("/productos", ObtenerProductos)
+
+	now := time.Now()
+	mock.ExpectQuery(`SELECT .* FROM "productos"`).
+		WillReturnRows(sqlmock.NewRows([]string{"id", "nombre", "descripcion", "precio", "created_at", "updated_at", "deleted_at"}).
+			AddRow("550e8400-e29b-41d4-a716-446655440012", "Audifonos", "Noise cancelling", 120.0, now, now, nil))
+
+	req, _ := http.NewRequest("GET", "/productos?page=2&limit=1", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	response := decodeAPIResponse(t, w.Body.Bytes())
+
+	var data []models.Producto
+	err := json.Unmarshal(response.Data, &data)
+	assert.NoError(t, err)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+	assert.Equal(t, "success", response.Status)
+	assert.Equal(t, "Datos recuperados correctamente", response.Message)
+	assert.Len(t, data, 1)
+	assert.Equal(t, "Audifonos", data[0].Nombre)
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestObtenerProductos_PaginacionInvalida(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	db, _ := SetupTestDB(t)
+	setDBForTest(t, db)
+
+	r := gin.Default()
+	r.GET("/productos", ObtenerProductos)
+
+	req, _ := http.NewRequest("GET", "/productos?page=0&limit=-5", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	response := decodeAPIResponse(t, w.Body.Bytes())
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+	assert.Equal(t, "error", response.Status)
+	assert.Equal(t, string(apierrors.InvalidParam), response.Error.Code)
+}
+
 func TestObtenerProductoPorID_Exito(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	db, mock := SetupTestDB(t)
