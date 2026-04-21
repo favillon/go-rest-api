@@ -367,9 +367,12 @@ docker compose exec app golangci-lint run ./...
 ```text
 .
 ├── .air.toml
+├── .dockerignore
 ├── .env
+├── .env.docker
 ├── .env.example
 ├── .gitignore
+├── .golangci.yml
 ├── README.md
 ├── api/
 │   ├── errors/
@@ -381,14 +384,23 @@ docker compose exec app golangci-lint run ./...
 ├── controllers/
 │   ├── producto_controller.go
 │   └── producto_controller_test.go
+├── docs/
+│   ├── docs.go
+│   ├── error-codes.md
+│   ├── swagger.json
+│   └── swagger.yaml
+├── middleware/
+│   └── ratelimit.go
 ├── models/
 │   └── producto.go
 ├── docker-compose.yml
+├── Dockerfile
+├── Dockerfile.dev
 ├── main.go
 ├── go.mod
 ├── go.sum
-├── coverage.out
-└── tmp/
+├── routes.go
+└── swagger_test.go
 ```
 
 ## Notas tecnicas
