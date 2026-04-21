@@ -28,3 +28,7 @@ vendor/
 # Air / local build artifacts
 tmp/
 backend-productos
+
+# Swagger generated files (regenerated via 'swag init')
+docs/swagger.json
+docs/swagger.yaml

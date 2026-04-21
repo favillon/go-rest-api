@@ -84,6 +84,44 @@ La API queda disponible en:
 http://localhost:${PORT_APP}
 ```
 
+## Documentacion Swagger / OpenAPI
+
+La API expone Swagger UI en:
+
+```bash
+http://localhost:${PORT_APP}/swagger/index.html
+```
+
+### Regenerar documentacion (cuando cambian handlers o modelos)
+
+Si actualizas anotaciones `@...` en handlers/modelos, vuelve a generar la spec:
+
+```bash
+go run github.com/swaggo/swag/cmd/swag@latest init
+```
+
+Esto actualiza:
+
+- `docs/docs.go`
+- `docs/swagger.json`
+- `docs/swagger.yaml`
+
+Notas:
+
+- `docs/swagger.json` y `docs/swagger.yaml` estan en `.gitignore` (artefactos generados).
+- `docs/docs.go` se mantiene en el repositorio para que la ruta `/swagger/*any` funcione al ejecutar la API.
+
+### Crear documentacion desde cero
+
+Si no tienes Swagger generado, ejecuta:
+
+```bash
+go get github.com/swaggo/gin-swagger github.com/swaggo/files
+go run github.com/swaggo/swag/cmd/swag@latest init
+```
+
+Luego inicia la API y abre `/swagger/index.html`.
+
 ## Endpoints expuestos
 
 Prefijo base: `/api/v1`
@@ -100,6 +138,25 @@ Ejemplos:
 curl http://localhost:8082/api/v1/productos
 curl http://localhost:8082/api/v1/productos/<uuid>
 ```
+
+## Rate limiting (limites)
+
+Actualmente los limites se definen en codigo (no por variables de entorno) en:
+
+- `routes.go`
+
+Valores actuales:
+
+- Lectura (`GET`): `readLimitPerMinute = 30`
+- Escritura (`POST`, `PUT`, `DELETE`): `writeLimitPerMinute = 10`
+- Ventana: `time.Minute`
+
+Si necesitas cambiar limites hoy, ajusta esas constantes en `routes.go` y reinicia la API.
+
+Si quieres configurarlos sin tocar codigo, la siguiente mejora recomendada es leerlos desde variables de entorno, por ejemplo:
+
+- `RATE_LIMIT_READ_PER_MINUTE`
+- `RATE_LIMIT_WRITE_PER_MINUTE`
 
 ## Catalogo de codigos de error
 
@@ -119,6 +176,7 @@ Codigos actuales:
 - `INVALID_PARAMETER` (400)
 - `VALIDATION_ERROR` (400)
 - `RESOURCE_NOT_FOUND` (404)
+- `RATE_LIMIT_EXCEEDED` (429)
 
 ## Resumen de testing
 
