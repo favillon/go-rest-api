@@ -1,19 +1,29 @@
 package main
 
 import (
+	"os"
+	"strconv"
+	"time"
+
 	"backend-productos/controllers"
 	"backend-productos/middleware"
-	"time"
 
 	"github.com/gin-gonic/gin"
 )
 
-const (
-	readLimitPerMinute  = 30
-	writeLimitPerMinute = 10
-)
+func parseRateLimit(key string, defaultVal int) int {
+	if val := os.Getenv(key); val != "" {
+		if parsed, err := strconv.Atoi(val); err == nil && parsed > 0 {
+			return parsed
+		}
+	}
+	return defaultVal
+}
 
 func registerRoutes(r *gin.Engine) {
+	readLimitPerMinute := parseRateLimit("RATE_LIMIT_READ_PER_MINUTE", 30)
+	writeLimitPerMinute := parseRateLimit("RATE_LIMIT_WRITE_PER_MINUTE", 10)
+
 	readLimiter := middleware.RateLimitByIP(readLimitPerMinute, time.Minute)
 	writeLimiter := middleware.RateLimitByIP(writeLimitPerMinute, time.Minute)
 

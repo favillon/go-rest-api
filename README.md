@@ -37,6 +37,8 @@ Variables usadas:
 - `POSTGRES_DB`: nombre de la base de datos
 - `POSTGRES_USER`: usuario de PostgreSQL
 - `POSTGRES_PASSWORD`: password de PostgreSQL
+- `RATE_LIMIT_READ_PER_MINUTE`: limite de solicitudes de lectura por IP/minuto (default: `30`)
+- `RATE_LIMIT_WRITE_PER_MINUTE`: limite de solicitudes de escritura por IP/minuto (default: `10`)
 
 Ejemplo (`.env.example`):
 
@@ -48,6 +50,8 @@ POSTGRES_HOST_PORT=5432
 POSTGRES_DB=restapi_go_db
 POSTGRES_USER=user_go
 POSTGRES_PASSWORD=change_me
+RATE_LIMIT_READ_PER_MINUTE=30
+RATE_LIMIT_WRITE_PER_MINUTE=10
 ```
 
 ## Base de datos (Docker)
@@ -141,22 +145,21 @@ curl http://localhost:8082/api/v1/productos/<uuid>
 
 ## Rate limiting (limites)
 
-Actualmente los limites se definen en codigo (no por variables de entorno) en:
+Los limites de solicitudes por IP se configuran mediante variables de entorno:
 
-- `routes.go`
+- `RATE_LIMIT_READ_PER_MINUTE`: limite para endpoints de lectura (`GET`). Default: `30`
+- `RATE_LIMIT_WRITE_PER_MINUTE`: limite para endpoints de escritura (`POST`, `PUT`, `DELETE`). Default: `10`
 
-Valores actuales:
+Ventana de tiempo: 1 minuto.
 
-- Lectura (`GET`): `readLimitPerMinute = 30`
-- Escritura (`POST`, `PUT`, `DELETE`): `writeLimitPerMinute = 10`
-- Ventana: `time.Minute`
+Los headers `X-RateLimit-Limit` y `X-RateLimit-Remaining` se incluyen en cada respuesta. Al exceder el limite se devuelve `429` con header `Retry-After`.
 
-Si necesitas cambiar limites hoy, ajusta esas constantes en `routes.go` y reinicia la API.
+Configuracion en `.env` o `.env.docker`:
 
-Si quieres configurarlos sin tocar codigo, la siguiente mejora recomendada es leerlos desde variables de entorno, por ejemplo:
-
-- `RATE_LIMIT_READ_PER_MINUTE`
-- `RATE_LIMIT_WRITE_PER_MINUTE`
+```dotenv
+RATE_LIMIT_READ_PER_MINUTE=30
+RATE_LIMIT_WRITE_PER_MINUTE=10
+```
 
 ## Catalogo de codigos de error
 
@@ -285,11 +288,11 @@ La imagen final de producción:
 ### Estructura de Dockerfiles
 
 - **Dockerfile**: Multietapa para producción
-  - Etapa 1: golang:1.21-alpine, compila el binario
+  - Etapa 1: golang:1.26.2-alpine3.22, compila el binario
   - Etapa 2: alpine:3.18, solo binario, ~5-10 MB, listo para prod
   
 - **Dockerfile.dev**: Para desarrollo con Air
-  - golang:1.21-alpine + Air preinstalado
+  - golang:1.26.2-alpine3.22 + Air + golangci-lint preinstalados
   - Recarga automática en cambios de código
   - Volumen montado del código fuente
 
@@ -305,6 +308,8 @@ PORT_APP=8082
 POSTGRES_HOST=localhost
 POSTGRES_PORT=5432
 POSTGRES_HOST_PORT=5432
+RATE_LIMIT_READ_PER_MINUTE=30
+RATE_LIMIT_WRITE_PER_MINUTE=10
 ```
 
 Para desarrollo en Docker, existe `.env.docker` (cargado automáticamente en contenedor):
@@ -317,6 +322,8 @@ PORT_APP=8082
 POSTGRES_HOST=postgres
 POSTGRES_PORT=5432
 POSTGRES_HOST_PORT=5432
+RATE_LIMIT_READ_PER_MINUTE=30
+RATE_LIMIT_WRITE_PER_MINUTE=10
 ```
 
 Ver `.env.example` para más detalles.
