@@ -8,7 +8,6 @@
 tmp/
 coverage.out
 *.log
-docs/
 README.md
 .gitkeep
 
