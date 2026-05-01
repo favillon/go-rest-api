@@ -5,7 +5,7 @@ import (
 	"strconv"
 	"time"
 
-	"backend-productos/controllers"
+	"backend-productos/internal/infrastructure/http"
 	"backend-productos/middleware"
 
 	"github.com/gin-gonic/gin"
@@ -20,7 +20,7 @@ func parseRateLimit(key string, defaultVal int) int {
 	return defaultVal
 }
 
-func registerRoutes(r *gin.Engine) {
+func registerRoutes(r *gin.Engine, handler *http.ProductoHandler) {
 	readLimitPerMinute := parseRateLimit("RATE_LIMIT_READ_PER_MINUTE", 30)
 	writeLimitPerMinute := parseRateLimit("RATE_LIMIT_WRITE_PER_MINUTE", 10)
 
@@ -29,10 +29,10 @@ func registerRoutes(r *gin.Engine) {
 
 	api := r.Group("/api/v1")
 	{
-		api.GET("/productos", readLimiter, controllers.ObtenerProductos)
-		api.GET("/productos/:id", readLimiter, controllers.ObtenerProductoPorID)
-		api.POST("/productos", writeLimiter, controllers.CrearProducto)
-		api.PUT("/productos/:id", writeLimiter, controllers.ActualizarProducto)
-		api.DELETE("/productos/:id", writeLimiter, controllers.EliminarProducto)
+		api.GET("/productos", readLimiter, handler.ObtenerProductos)
+		api.GET("/productos/:id", readLimiter, handler.ObtenerProductoPorID)
+		api.POST("/productos", writeLimiter, handler.CrearProducto)
+		api.PUT("/productos/:id", writeLimiter, handler.ActualizarProducto)
+		api.DELETE("/productos/:id", writeLimiter, handler.EliminarProducto)
 	}
 }

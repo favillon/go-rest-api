@@ -1,4 +1,4 @@
-package controllers
+package http
 
 import (
 	"errors"
@@ -8,8 +8,8 @@ import (
 
 	apierrors "backend-productos/api/errors"
 	apiresponse "backend-productos/api/response"
-	"backend-productos/config"
-	"backend-productos/models"
+	"backend-productos/internal/application/service"
+	"backend-productos/internal/domain/model"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
@@ -23,6 +23,14 @@ const (
 	defaultLimit                = 20
 	maxLimit                    = 100
 )
+
+type ProductoHandler struct {
+	service *service.ProductoService
+}
+
+func NewProductoHandler(svc *service.ProductoService) *ProductoHandler {
+	return &ProductoHandler{service: svc}
+}
 
 func parsePaginationParams(c *gin.Context) (int, int, error) {
 	page := defaultPage
@@ -62,22 +70,15 @@ func parsePaginationParams(c *gin.Context) (int, int, error) {
 // @Failure 400 {object} map[string]interface{} "status:error (invalid pagination params)"
 // @Failure 500 {object} map[string]interface{} "status:error (database error)"
 // @Router /api/v1/productos [get]
-func ObtenerProductos(c *gin.Context) {
-	if config.DB == nil {
-		apiresponse.RespondError(c, http.StatusInternalServerError, "No fue posible procesar la solicitud", apierrors.DBNotInitialized, "database is not initialized")
-		return
-	}
-
+func (h *ProductoHandler) ObtenerProductos(c *gin.Context) {
 	page, limit, err := parsePaginationParams(c)
 	if err != nil {
 		apiresponse.RespondError(c, http.StatusBadRequest, "Parametros de paginacion invalidos", apierrors.InvalidParam, err.Error())
 		return
 	}
 
-	offset := (page - 1) * limit
-
-	var productos []models.Producto
-	if err := config.DB.Limit(limit).Offset(offset).Find(&productos).Error; err != nil {
+	productos, err := h.service.GetAll(c.Request.Context(), page, limit)
+	if err != nil {
 		log.Printf("database error in ObtenerProductos: %v", err)
 		apiresponse.RespondError(c, http.StatusInternalServerError, "No fue posible obtener los productos", apierrors.Database, publicDatabaseErrorDetail)
 		return
@@ -98,22 +99,17 @@ func ObtenerProductos(c *gin.Context) {
 // @Failure 404 {object} map[string]interface{} "status:error (product not found)"
 // @Failure 500 {object} map[string]interface{} "status:error (database error)"
 // @Router /api/v1/productos/{id} [get]
-func ObtenerProductoPorID(c *gin.Context) {
-	if config.DB == nil {
-		apiresponse.RespondError(c, http.StatusInternalServerError, "No fue posible procesar la solicitud", apierrors.DBNotInitialized, "database is not initialized")
-		return
-	}
-
+func (h *ProductoHandler) ObtenerProductoPorID(c *gin.Context) {
 	id, err := uuid.Parse(c.Param("id"))
 	if err != nil {
-		apiresponse.RespondError(c, http.StatusBadRequest, "El parámetro 'id' es obligatorio y debe ser un UUID válido", apierrors.InvalidParam, "id inválido")
+		apiresponse.RespondError(c, http.StatusBadRequest, "El parametro 'id' es obligatorio y debe ser un UUID valido", apierrors.InvalidParam, "id invalido")
 		return
 	}
 
-	var producto models.Producto
-	if err := config.DB.Where("id = ?", id.String()).Take(&producto).Error; err != nil {
+	producto, err := h.service.GetByID(c.Request.Context(), id)
+	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			apiresponse.RespondError(c, http.StatusNotFound, "No se encontró el recurso solicitado", apierrors.NotFound, "producto no encontrado")
+			apiresponse.RespondError(c, http.StatusNotFound, "No se encontro el recurso solicitado", apierrors.NotFound, "producto no encontrado")
 			return
 		}
 
@@ -137,18 +133,20 @@ func ObtenerProductoPorID(c *gin.Context) {
 // @Failure 429 {object} map[string]interface{} "status:error (rate limit exceeded)"
 // @Failure 500 {object} map[string]interface{} "status:error (database error)"
 // @Router /api/v1/productos [post]
-func CrearProducto(c *gin.Context) {
-	var input models.Producto
+func (h *ProductoHandler) CrearProducto(c *gin.Context) {
+	var input model.Producto
 	if err := c.ShouldBindJSON(&input); err != nil {
 		log.Printf("validation error in CrearProducto: %v", err)
-		apiresponse.RespondError(c, http.StatusBadRequest, "La solicitud contiene datos inválidos", apierrors.Validation, publicValidationErrorDetail)
+		apiresponse.RespondError(c, http.StatusBadRequest, "La solicitud contiene datos invalidos", apierrors.Validation, publicValidationErrorDetail)
 		return
 	}
-	if err := config.DB.Create(&input).Error; err != nil {
+
+	if err := h.service.Create(c.Request.Context(), &input); err != nil {
 		log.Printf("database error in CrearProducto: %v", err)
 		apiresponse.RespondError(c, http.StatusInternalServerError, "No fue posible crear el producto", apierrors.Database, publicDatabaseErrorDetail)
 		return
 	}
+
 	apiresponse.RespondSuccess(c, http.StatusCreated, "Recurso creado correctamente", input)
 }
 
@@ -166,37 +164,32 @@ func CrearProducto(c *gin.Context) {
 // @Failure 429 {object} map[string]interface{} "status:error (rate limit exceeded)"
 // @Failure 500 {object} map[string]interface{} "status:error (database error)"
 // @Router /api/v1/productos/{id} [put]
-func ActualizarProducto(c *gin.Context) {
+func (h *ProductoHandler) ActualizarProducto(c *gin.Context) {
 	id, err := uuid.Parse(c.Param("id"))
 	if err != nil {
-		apiresponse.RespondError(c, http.StatusBadRequest, "El parámetro 'id' es obligatorio y debe ser un UUID válido", apierrors.InvalidParam, "id inválido")
+		apiresponse.RespondError(c, http.StatusBadRequest, "El parametro 'id' es obligatorio y debe ser un UUID valido", apierrors.InvalidParam, "id invalido")
 		return
 	}
 
-	var producto models.Producto
-	if err := config.DB.Where("id = ?", id.String()).Take(&producto).Error; err != nil {
+	var input model.Producto
+	if err := c.ShouldBindJSON(&input); err != nil {
+		log.Printf("validation error in ActualizarProducto: %v", err)
+		apiresponse.RespondError(c, http.StatusBadRequest, "La solicitud contiene datos invalidos", apierrors.Validation, publicValidationErrorDetail)
+		return
+	}
+
+	producto, err := h.service.Update(c.Request.Context(), id, &input)
+	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			apiresponse.RespondError(c, http.StatusNotFound, "No se encontró el recurso solicitado", apierrors.NotFound, "producto no encontrado")
+			apiresponse.RespondError(c, http.StatusNotFound, "No se encontro el recurso solicitado", apierrors.NotFound, "producto no encontrado")
 			return
 		}
 
-		log.Printf("database error loading producto in ActualizarProducto: %v", err)
-		apiresponse.RespondError(c, http.StatusInternalServerError, "No fue posible actualizar el producto", apierrors.Database, publicDatabaseErrorDetail)
-		return
-	}
-
-	var input models.Producto
-	if err := c.ShouldBindJSON(&input); err != nil {
-		log.Printf("validation error in ActualizarProducto: %v", err)
-		apiresponse.RespondError(c, http.StatusBadRequest, "La solicitud contiene datos inválidos", apierrors.Validation, publicValidationErrorDetail)
-		return
-	}
-
-	if err := config.DB.Model(&producto).Updates(input).Error; err != nil {
 		log.Printf("database error updating producto in ActualizarProducto: %v", err)
 		apiresponse.RespondError(c, http.StatusInternalServerError, "No fue posible actualizar el producto", apierrors.Database, publicDatabaseErrorDetail)
 		return
 	}
+
 	apiresponse.RespondSuccess(c, http.StatusOK, "Recurso actualizado correctamente", producto)
 }
 
@@ -213,29 +206,23 @@ func ActualizarProducto(c *gin.Context) {
 // @Failure 429 {object} map[string]interface{} "status:error (rate limit exceeded)"
 // @Failure 500 {object} map[string]interface{} "status:error (database error)"
 // @Router /api/v1/productos/{id} [delete]
-func EliminarProducto(c *gin.Context) {
+func (h *ProductoHandler) EliminarProducto(c *gin.Context) {
 	id, err := uuid.Parse(c.Param("id"))
 	if err != nil {
-		apiresponse.RespondError(c, http.StatusBadRequest, "El parámetro 'id' es obligatorio y debe ser un UUID válido", apierrors.InvalidParam, "id inválido")
+		apiresponse.RespondError(c, http.StatusBadRequest, "El parametro 'id' es obligatorio y debe ser un UUID valido", apierrors.InvalidParam, "id invalido")
 		return
 	}
 
-	var producto models.Producto
-	if err := config.DB.Where("id = ?", id.String()).Take(&producto).Error; err != nil {
+	if err := h.service.Delete(c.Request.Context(), id); err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			apiresponse.RespondError(c, http.StatusNotFound, "No se encontró el recurso solicitado", apierrors.NotFound, "producto no encontrado")
+			apiresponse.RespondError(c, http.StatusNotFound, "No se encontro el recurso solicitado", apierrors.NotFound, "producto no encontrado")
 			return
 		}
 
-		log.Printf("database error loading producto in EliminarProducto: %v", err)
-		apiresponse.RespondError(c, http.StatusInternalServerError, "No fue posible eliminar el producto", apierrors.Database, publicDatabaseErrorDetail)
-		return
-	}
-
-	if err := config.DB.Delete(&producto).Error; err != nil {
 		log.Printf("database error deleting producto in EliminarProducto: %v", err)
 		apiresponse.RespondError(c, http.StatusInternalServerError, "No fue posible eliminar el producto", apierrors.Database, publicDatabaseErrorDetail)
 		return
 	}
+
 	apiresponse.RespondSuccess(c, http.StatusOK, "Recurso eliminado correctamente", gin.H{"deleted": true})
 }

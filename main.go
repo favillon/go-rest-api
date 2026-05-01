@@ -6,6 +6,9 @@ import (
 	"os"
 
 	"backend-productos/config"
+	"backend-productos/internal/application/service"
+	"backend-productos/internal/infrastructure/http"
+	"backend-productos/internal/infrastructure/persistence"
 
 	_ "backend-productos/docs" // Swagger docs auto-generated
 
@@ -17,7 +20,7 @@ import (
 
 // @title Backend Productos API
 // @version 1.0
-// @description API REST para gestión de productos con PostgreSQL
+// @description API REST para gestion de productos con PostgreSQL
 // @termsOfService http://swagger.io/terms/
 // @contact.name API Support
 // @license.name Apache 2.0
@@ -26,9 +29,6 @@ import (
 // @basePath /
 // @schemes http https
 func main() {
-	// Try to load .env.docker (for Docker environment)
-	// then .env (for local development)
-	// If neither exists, use system environment variables
 	if err := godotenv.Load(".env.docker"); err != nil {
 		if err := godotenv.Load(".env"); err != nil {
 			log.Println("No .env or .env.docker file found, using system environment variables")
@@ -45,14 +45,17 @@ func main() {
 		}
 	}()
 
-	r := gin.Default()
-	registerRoutes(r)
+	repo := persistence.NewProductoRepository(config.DB)
+	svc := service.NewProductoService(repo)
+	handler := http.NewProductoHandler(svc)
 
-	// Register Swagger documentation
+	r := gin.Default()
+	registerRoutes(r, handler)
+
 	r.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
 
-	fmt.Println("✓ backend-productos iniciado")
-	fmt.Println("✓ Conexión a PostgreSQL exitosa")
+	fmt.Println("backend-productos iniciado")
+	fmt.Println("Conexion a PostgreSQL exitosa")
 
 	port := os.Getenv("PORT_APP")
 	if port == "" {

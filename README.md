@@ -1,6 +1,6 @@
 # Backend Productos
 
-API REST en Go usando Gin, GORM y PostgreSQL.
+API REST en Go usando arquitectura hexagonal (puertos y adaptadores), Gin, GORM y PostgreSQL.
 
 <div style="display:flex; flex-wrap:wrap; gap:12px; align-items:center;">
 
@@ -181,19 +181,79 @@ Codigos actuales:
 - `RESOURCE_NOT_FOUND` (404)
 - `RATE_LIMIT_EXCEEDED` (429)
 
+## Arquitectura Hexagonal
+
+Este proyecto utiliza **arquitectura hexagonal** (tambien conocida como puertos y adaptadores), reemplazando el patron MVC anterior.
+
+### Estructura de capas
+
+```
+┌─────────────────────────────────────────────────────────┐
+│                    Capa de Dominio                       │
+│  internal/domain/model/   → Entidades (Producto)        │
+│  internal/domain/port/    → Interfaces (puertos)         │
+└─────────────────────────────────────────────────────────┘
+                          ↕
+┌─────────────────────────────────────────────────────────┐
+│                 Capa de Aplicacion                       │
+│  internal/application/service/ → Casos de uso            │
+└─────────────────────────────────────────────────────────┘
+                          ↕
+┌─────────────────────────────────────────────────────────┐
+│              Capa de Infraestructura                     │
+│  internal/infrastructure/persistence/ → Repositorio GORM │
+│  internal/infrastructure/http/        → Handlers HTTP    │
+└─────────────────────────────────────────────────────────┘
+```
+
+### Ventajas sobre MVC
+
+| Aspecto | MVC (anterior) | Hexagonal (actual) |
+|---------|----------------|-------------------|
+| **Acoplamiento** | Controllers dependen directamente de GORM y config.DB | Controllers solo conocen interfaces (puertos) |
+| **Testabilidad** | Tests requieren mockear variable global config.DB | Tests inyectan mocks directamente por constructor |
+| **Separacion** | Logica de negocio mezclada con HTTP y DB | Cada capa tiene responsabilidad unica |
+| **Dependencias** | Fluyen hacia abajo (controllers → models → config) | Fluyen hacia adentro (infraestructura → dominio) |
+| **Reemplazo de tecnologia** | Cambiar ORM o framework HTTP afecta toda la app | Solo se cambia el adaptador correspondiente |
+| **Estado global** | config.DB como variable global | Inyeccion de dependencias desde main.go |
+| **Cobertura de tests** | Tests solo en controllers | Tests en service (100%), repository (100%), handler (97.5%) |
+
+### Flujo de una solicitud
+
+1. **HTTP** → `ProductoHandler` recibe la request, valida y parsea
+2. **Service** → `ProductoService` ejecuta la logica de negocio
+3. **Repository** → `ProductoRepositoryImpl` accede a la base de datos
+4. **Response** → El handler formatea y devuelve la respuesta
+
+### Flujo de inyeccion de dependencias (main.go)
+
+```go
+repo := persistence.NewProductoRepository(config.DB)
+svc := service.NewProductoService(repo)
+handler := http.NewProductoHandler(svc)
+registerRoutes(r, handler)
+```
+
 ## Resumen de testing
 
-Actualmente se cubre el flujo del controlador de productos con pruebas en `controllers/producto_controller_test.go`:
+El proyecto cuenta con **47 tests** distribuidos en 3 capas:
 
-Estado actual:
+| Capa | Archivo | Tests | Cobertura |
+|------|---------|-------|-----------|
+| **Service** | `internal/application/service/producto_service_test.go` | 13 | 100% |
+| **Repository** | `internal/infrastructure/persistence/producto_repository_test.go` | 11 | 100% |
+| **Handler** | `internal/infrastructure/http/producto_handler_test.go` | 22 | 97.5% |
+| **Swagger** | `swagger_test.go` | 2 | - |
 
-- Validacion manual confirmada: los tests del controlador pasan despues del refactor a `api/errors` y `api/response`.
+Casos cubiertos por endpoint:
 
-- Crear producto: exito y validacion fallida
-- Obtener productos: exito, error DB y DB no inicializada
-- Obtener producto por ID: exito, ID invalido, no encontrado, error DB y DB no inicializada
-- Actualizar producto: exito, ID invalido, no encontrado, payload invalido y error DB
-- Eliminar producto: exito, ID invalido, no encontrado y error DB
+- **Crear producto**: exito, validacion fallida, error DB
+- **Obtener productos**: exito, paginacion valida, paginacion invalida, error DB
+- **Obtener producto por ID**: exito, ID invalido, no encontrado, error DB
+- **Actualizar producto**: exito, ID invalido, no encontrado, payload invalido, error DB lookup, error DB update
+- **Eliminar producto**: exito, ID invalido, no encontrado, error DB lookup, error DB delete
+- **Service**: GetAll, GetByID, Create, Update, Delete (exito, not found, error)
+- **Repository**: GetAll, GetByID, Create, Update, Delete (exito, error)
 
 ## Comandos de testing y coverage
 
@@ -203,10 +263,18 @@ Ejecutar todos los tests:
 go test ./...
 ```
 
-Ejecutar solo tests del controlador de productos:
+Ejecutar tests con detalle:
 
 ```bash
-go test ./controllers -v
+go test ./... -v
+```
+
+Ejecutar tests por capa:
+
+```bash
+go test ./internal/application/service -v      # Tests del service
+go test ./internal/infrastructure/http -v       # Tests del handler
+go test ./internal/infrastructure/persistence -v # Tests del repository
 ```
 
 Generar reporte de coverage:
@@ -229,7 +297,6 @@ Si estas usando Docker Compose con el contenedor de desarrollo, ejecuta los test
 
 ```bash
 docker compose exec app go test ./...
-docker compose exec app go test ./controllers -v
 docker compose exec app go test ./... -coverprofile=coverage.out
 docker compose exec app go tool cover -func=coverage.out
 docker compose exec app go tool cover -html=coverage.out
@@ -381,18 +448,30 @@ docker compose exec app golangci-lint run ./...
 │       └── response.go
 ├── config/
 │   └── db.go
-├── controllers/
-│   ├── producto_controller.go
-│   └── producto_controller_test.go
 ├── docs/
 │   ├── docs.go
 │   ├── error-codes.md
 │   ├── swagger.json
 │   └── swagger.yaml
+├── internal/
+│   ├── application/
+│   │   └── service/
+│   │       ├── producto_service.go
+│   │       └── producto_service_test.go
+│   ├── domain/
+│   │   ├── model/
+│   │   │   └── producto.go
+│   │   └── port/
+│   │       └── producto_repository.go
+│   └── infrastructure/
+│       ├── http/
+│       │   ├── producto_handler.go
+│       │   └── producto_handler_test.go
+│       └── persistence/
+│           ├── producto_repository.go
+│           └── producto_repository_test.go
 ├── middleware/
 │   └── ratelimit.go
-├── models/
-│   └── producto.go
 ├── docker-compose.yml
 ├── Dockerfile
 ├── Dockerfile.dev
@@ -408,3 +487,8 @@ docker compose exec app golangci-lint run ./...
 - Se usa `uuid` como clave primaria en `Producto`.
 - El endpoint `GET /productos/:id` valida UUID y maneja `record not found`.
 - La conexion a DB se inicializa en `main.go` con `config.InitDB()`.
+- **Arquitectura hexagonal**: las dependencias fluyen hacia adentro (infraestructura → dominio).
+- **Inyeccion de dependencias**: `main.go` instancia `repo → service → handler` y los inyecta.
+- **Puerto definido**: `port.ProductoRepository` es la interfaz que separa dominio de infraestructura.
+- **Soft delete**: GORM maneja eliminaciones logicas via `DeletedAt`.
+- **Paginacion**: `GET /productos` acepta `?page=N&limit=N` (default: page=1, limit=20, max=100).

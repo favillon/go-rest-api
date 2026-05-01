@@ -5,7 +5,7 @@ import (
 	"net/url"
 	"os"
 
-	"backend-productos/models"
+	"backend-productos/internal/domain/model"
 
 	"github.com/jackc/pgx/v5"
 	"gorm.io/driver/postgres"
@@ -47,7 +47,7 @@ func InitDB() error {
 		return fmt.Errorf("error al habilitar extension pgcrypto: %w", err)
 	}
 
-	if err := DB.AutoMigrate(&models.Producto{}); err != nil {
+	if err := DB.AutoMigrate(&model.Producto{}); err != nil {
 		return fmt.Errorf("error al ejecutar migraciones: %w", err)
 	}
 
