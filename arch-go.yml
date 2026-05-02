@@ -1,0 +1,63 @@
+version: 1
+threshold:
+    compliance: 100
+    coverage: 100
+dependenciesRules:
+    - package: 'backend-productos'
+      shouldOnlyDependsOn:
+        internal:
+            - '**.internal.**'
+            - '**.api.**'
+            - '**.config.**'
+            - '**.middleware.**'
+            - '**.docs.**'
+            - github.com/gin-gonic/gin
+            - github.com/joho/godotenv
+            - github.com/swaggo/files
+            - github.com/swaggo/gin-swagger
+    - package: '**.docs.**'
+      shouldOnlyDependsOn:
+        internal: []
+    - package: '**.internal.domain.**'
+      shouldOnlyDependsOn:
+        internal:
+            - '**.internal.domain.**'
+            - github.com/google/uuid
+            - gorm.io/gorm
+    - package: '**.internal.application.**'
+      shouldOnlyDependsOn:
+        internal:
+            - '**.internal.domain.**'
+            - '**.internal.application.**'
+            - github.com/google/uuid
+            - gorm.io/gorm
+    - package: '**.internal.infrastructure.**'
+      shouldOnlyDependsOn:
+        internal:
+            - '**.internal.domain.**'
+            - '**.internal.application.**'
+            - '**.internal.infrastructure.**'
+            - '**.api.**'
+            - github.com/google/uuid
+            - gorm.io/gorm
+            - gorm.io/driver/postgres
+            - github.com/gin-gonic/gin
+            - github.com/DATA-DOG/go-sqlmock
+            - github.com/stretchr/testify
+    - package: '**.api.**'
+      shouldOnlyDependsOn:
+        internal:
+            - '**.api.**'
+    - package: '**.config.**'
+      shouldOnlyDependsOn:
+        internal:
+            - '**.config.**'
+            - '**.internal.domain.**'
+            - gorm.io/gorm
+            - gorm.io/driver/postgres
+    - package: '**.middleware.**'
+      shouldOnlyDependsOn:
+        internal:
+            - '**.middleware.**'
+            - '**.api.**'
+            - github.com/gin-gonic/gin
