@@ -395,6 +395,55 @@ RATE_LIMIT_WRITE_PER_MINUTE=10
 
 Ver `.env.example` para más detalles.
 
+## Verificacion de arquitectura (Arch-Go)
+
+El proyecto usa [Arch-Go](https://github.com/arch-go/arch-go) para validar que las dependencias entre capas respetan la arquitectura hexagonal.
+
+### Instalacion
+
+```bash
+go install -v github.com/arch-go/arch-go/v2@latest
+```
+
+### Ejecucion
+
+```bash
+arch-go
+```
+
+Salida esperada:
+
+```
+Compliance:      100% (PASS)
+Coverage:        100% (PASS)
+```
+
+### Opciones utiles
+
+```bash
+arch-go --verbose          # Muestra detalle por paquete
+arch-go --json             # Genera reporte en .arch-go/report.json
+arch-go --html             # Genera reporte en .arch-go/report.html
+arch-go describe           # Describe las reglas configuradas
+```
+
+### Reglas configuradas (`arch-go.yml`)
+
+| Capa | Solo puede depender de |
+|------|----------------------|
+| `domain` | `domain`, librerias externas (`uuid`, `gorm`) |
+| `application` | `domain`, `application`, librerias externas |
+| `infrastructure` | `domain`, `application`, `infrastructure`, `api`, librerias externas |
+| `api` | `api` |
+| `config` | `config`, `domain`, librerias externas |
+| `middleware` | `middleware`, `api`, `gin` |
+
+### Dentro del contenedor de desarrollo
+
+```bash
+docker compose exec app arch-go
+```
+
 ## Comandos para linters
 
 Formatear codigo con gofmt:
@@ -440,6 +489,7 @@ docker compose exec app golangci-lint run ./...
 ├── .env.example
 ├── .gitignore
 ├── .golangci.yml
+├── arch-go.yml
 ├── README.md
 ├── api/
 │   ├── errors/
