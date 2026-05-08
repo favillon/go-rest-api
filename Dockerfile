@@ -12,7 +12,7 @@ RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o /app/main .
 # Stage 2: Runtime (minimal)
 FROM alpine:3.18
 
-RUN apk --no-cache add ca-certificates wget
+RUN apk --no-cache add ca-certificates curl
 
 WORKDIR /root/
 
@@ -25,6 +25,6 @@ ENV PORT_APP=${PORT_APP}
 EXPOSE ${PORT_APP}
 
 HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 \
-  CMD wget --quiet --tries=1 --spider http://localhost:${PORT_APP}/api/v1/graphql || exit 1
+  CMD curl --fail --silent --show-error http://localhost:${PORT_APP}/api/v1/graphql >/dev/null || exit 1
 
 CMD ["./main"]
