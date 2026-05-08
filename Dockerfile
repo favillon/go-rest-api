@@ -25,6 +25,6 @@ ENV PORT_APP=${PORT_APP}
 EXPOSE ${PORT_APP}
 
 HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 \
-  CMD wget --quiet --tries=1 --spider http://localhost:${PORT_APP}/api/v1/productos || exit 1
+  CMD wget --quiet --tries=1 --spider http://localhost:${PORT_APP}/api/v1/graphql || exit 1
 
 CMD ["./main"]
