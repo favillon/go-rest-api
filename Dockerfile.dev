@@ -18,8 +18,11 @@ RUN go mod download
 # Copy .air.toml and .env.docker for Docker development
 COPY .air.toml .env.docker ./
 
-# Expose the port
-EXPOSE 8082
+# Accept PORT_APP at build time; default 8082
+ARG PORT_APP=8082
+ENV PORT_APP=${PORT_APP}
+
+EXPOSE ${PORT_APP}
 
 # Run Air for hot reload
 # Air watches for file changes and rebuilds/restarts the app
