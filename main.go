@@ -6,12 +6,15 @@ import (
 	"os"
 
 	"backend-productos/config"
+	"backend-productos/graph"
 	"backend-productos/internal/application/service"
-	"backend-productos/internal/infrastructure/http"
-	"backend-productos/internal/infrastructure/persistence"
+	httpHandler "backend-productos/internal/infrastructure/http"
+	"backend-productos/internal/infrastructure/persistence/mongodb"
 
-	_ "backend-productos/docs" // Swagger docs auto-generated
+	_ "backend-productos/docs"
 
+	"github.com/99designs/gqlgen/graphql/handler"
+	"github.com/99designs/gqlgen/graphql/playground"
 	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
 	swaggerFiles "github.com/swaggo/files"
@@ -19,8 +22,8 @@ import (
 )
 
 // @title Backend Productos API
-// @version 1.0
-// @description API REST para gestion de productos con PostgreSQL
+// @version 2.0
+// @description API REST y GraphQL para gestion de productos con MongoDB
 // @termsOfService http://swagger.io/terms/
 // @contact.name API Support
 // @license.name Apache 2.0
@@ -35,34 +38,59 @@ func main() {
 		}
 	}
 
-	if err := config.InitDB(); err != nil {
-		log.Fatalf("database connection failed: %v", err)
+	if err := config.InitMongoDB(); err != nil {
+		log.Fatalf("MongoDB connection failed: %v", err)
 	}
 
 	defer func() {
-		if err := config.CloseDB(); err != nil {
-			log.Printf("error closing database: %v", err)
+		if err := config.CloseMongoDB(); err != nil {
+			log.Printf("error closing MongoDB: %v", err)
 		}
 	}()
 
-	repo := persistence.NewProductoRepository(config.DB)
-	svc := service.NewProductoService(repo)
-	handler := http.NewProductoHandler(svc)
+	productoRepo := mongodb.NewProductoRepository(config.MongoDatabase)
+	categoriaRepo := mongodb.NewCategoriaRepository(config.MongoDatabase)
+	inventarioRepo := mongodb.NewInventarioRepository(config.MongoDatabase)
+
+	productoSvc := service.NewProductoService(productoRepo)
+	categoriaSvc := service.NewCategoriaService(categoriaRepo)
+	inventarioSvc := service.NewInventarioService(inventarioRepo)
+
+	resolver := &graph.Resolver{
+		ProductoService:   productoSvc,
+		CategoriaService:  categoriaSvc,
+		InventarioService: inventarioSvc,
+	}
 
 	r := gin.Default()
-	registerRoutes(r, handler)
+
+	restHandler := httpHandler.NewProductoHandler(productoSvc)
+	registerRoutes(r, restHandler)
+
+	gqlHandler := handler.NewDefaultServer(
+		graph.NewExecutableSchema(graph.Config{Resolvers: resolver}),
+	)
+	r.POST("/api/v1/graphql", func(c *gin.Context) {
+		gqlHandler.ServeHTTP(c.Writer, c.Request)
+	})
+	r.GET("/api/v1/graphql", gin.WrapH(playground.Handler("GraphQL Playground", "/api/v1/graphql")))
 
 	r.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
 
 	fmt.Println("backend-productos iniciado")
-	fmt.Println("Conexion a PostgreSQL exitosa")
+	fmt.Println("Conexion a MongoDB exitosa")
+	fmt.Println("REST API: http://localhost:" + getPort() + "/api/v1/productos")
+	fmt.Println("GraphQL:  http://localhost:" + getPort() + "/api/v1/graphql")
 
+	if err := r.Run(":" + getPort()); err != nil {
+		log.Fatalf("server failed: %v", err)
+	}
+}
+
+func getPort() string {
 	port := os.Getenv("PORT_APP")
 	if port == "" {
 		port = "8082"
 	}
-
-	if err := r.Run(":" + port); err != nil {
-		log.Fatalf("server failed: %v", err)
-	}
+	return port
 }

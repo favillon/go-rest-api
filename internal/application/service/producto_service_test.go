@@ -6,12 +6,12 @@ import (
 	"testing"
 
 	"backend-productos/internal/application/service"
+	"backend-productos/internal/domain"
 	"backend-productos/internal/domain/model"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
-	"gorm.io/gorm"
 )
 
 type MockProductoRepository struct {
@@ -104,12 +104,12 @@ func TestService_GetByID_NotFound(t *testing.T) {
 	ctx := context.Background()
 	id := uuid.New()
 
-	mockRepo.On("GetByID", ctx, id).Return((*model.Producto)(nil), gorm.ErrRecordNotFound)
+	mockRepo.On("GetByID", ctx, id).Return((*model.Producto)(nil), domain.ErrNotFound)
 
 	result, err := svc.GetByID(ctx, id)
 
 	assert.Error(t, err)
-	assert.True(t, errors.Is(err, gorm.ErrRecordNotFound))
+	assert.True(t, errors.Is(err, domain.ErrNotFound))
 	assert.Nil(t, result)
 	mockRepo.AssertExpectations(t)
 }
@@ -189,12 +189,12 @@ func TestService_Update_NotFound(t *testing.T) {
 	id := uuid.New()
 	input := &model.Producto{Nombre: "Nuevo", Precio: 20.0}
 
-	mockRepo.On("GetByID", ctx, id).Return((*model.Producto)(nil), gorm.ErrRecordNotFound)
+	mockRepo.On("GetByID", ctx, id).Return((*model.Producto)(nil), domain.ErrNotFound)
 
 	result, err := svc.Update(ctx, id, input)
 
 	assert.Error(t, err)
-	assert.True(t, errors.Is(err, gorm.ErrRecordNotFound))
+	assert.True(t, errors.Is(err, domain.ErrNotFound))
 	assert.Nil(t, result)
 	mockRepo.AssertExpectations(t)
 }
@@ -242,12 +242,12 @@ func TestService_Delete_NotFound(t *testing.T) {
 	ctx := context.Background()
 	id := uuid.New()
 
-	mockRepo.On("GetByID", ctx, id).Return((*model.Producto)(nil), gorm.ErrRecordNotFound)
+	mockRepo.On("GetByID", ctx, id).Return((*model.Producto)(nil), domain.ErrNotFound)
 
 	err := svc.Delete(ctx, id)
 
 	assert.Error(t, err)
-	assert.True(t, errors.Is(err, gorm.ErrRecordNotFound))
+	assert.True(t, errors.Is(err, domain.ErrNotFound))
 	mockRepo.AssertExpectations(t)
 }
 

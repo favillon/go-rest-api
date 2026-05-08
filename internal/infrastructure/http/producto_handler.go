@@ -9,11 +9,11 @@ import (
 	apierrors "backend-productos/api/errors"
 	apiresponse "backend-productos/api/response"
 	"backend-productos/internal/application/service"
+	"backend-productos/internal/domain"
 	"backend-productos/internal/domain/model"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
-	"gorm.io/gorm"
 )
 
 const (
@@ -58,18 +58,6 @@ func parsePaginationParams(c *gin.Context) (int, int, error) {
 	return page, limit, nil
 }
 
-// ObtenerProductos retrieves all products with pagination
-// @Summary Get all products
-// @Description Retrieve a paginated list of all products. Default page is 1 with 20 items per page (max 100).
-// @Tags Productos
-// @Accept json
-// @Produce json
-// @Param page query int false "Page number (default 1)" default(1)
-// @Param limit query int false "Items per page (default 20, max 100)" default(20)
-// @Success 200 {object} map[string]interface{} "status:success,message:Datos recuperados correctamente,data:[]"
-// @Failure 400 {object} map[string]interface{} "status:error (invalid pagination params)"
-// @Failure 500 {object} map[string]interface{} "status:error (database error)"
-// @Router /api/v1/productos [get]
 func (h *ProductoHandler) ObtenerProductos(c *gin.Context) {
 	page, limit, err := parsePaginationParams(c)
 	if err != nil {
@@ -87,18 +75,6 @@ func (h *ProductoHandler) ObtenerProductos(c *gin.Context) {
 	apiresponse.RespondSuccess(c, http.StatusOK, "Datos recuperados correctamente", productos)
 }
 
-// ObtenerProductoPorID retrieves a single product by ID
-// @Summary Get product by ID
-// @Description Retrieve a specific product using its UUID
-// @Tags Productos
-// @Accept json
-// @Produce json
-// @Param id path string true "Product ID (UUID)"
-// @Success 200 {object} map[string]interface{} "status:success,data:Producto"
-// @Failure 400 {object} map[string]interface{} "status:error (invalid UUID)"
-// @Failure 404 {object} map[string]interface{} "status:error (product not found)"
-// @Failure 500 {object} map[string]interface{} "status:error (database error)"
-// @Router /api/v1/productos/{id} [get]
 func (h *ProductoHandler) ObtenerProductoPorID(c *gin.Context) {
 	id, err := uuid.Parse(c.Param("id"))
 	if err != nil {
@@ -108,7 +84,7 @@ func (h *ProductoHandler) ObtenerProductoPorID(c *gin.Context) {
 
 	producto, err := h.service.GetByID(c.Request.Context(), id)
 	if err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
+		if errors.Is(err, domain.ErrNotFound) {
 			apiresponse.RespondError(c, http.StatusNotFound, "No se encontro el recurso solicitado", apierrors.NotFound, "producto no encontrado")
 			return
 		}
@@ -121,22 +97,15 @@ func (h *ProductoHandler) ObtenerProductoPorID(c *gin.Context) {
 	apiresponse.RespondSuccess(c, http.StatusOK, "Datos recuperados correctamente", producto)
 }
 
-// CrearProducto creates a new product
-// @Summary Create a new product
-// @Description Create a new product with required fields: nombre and precio (must be > 0)
-// @Tags Productos
-// @Accept json
-// @Produce json
-// @Param product body models.Producto true "Product data"
-// @Success 201 {object} map[string]interface{} "status:success,message:Recurso creado correctamente,data:Producto"
-// @Failure 400 {object} map[string]interface{} "status:error (validation error)"
-// @Failure 429 {object} map[string]interface{} "status:error (rate limit exceeded)"
-// @Failure 500 {object} map[string]interface{} "status:error (database error)"
-// @Router /api/v1/productos [post]
 func (h *ProductoHandler) CrearProducto(c *gin.Context) {
 	var input model.Producto
 	if err := c.ShouldBindJSON(&input); err != nil {
 		log.Printf("validation error in CrearProducto: %v", err)
+		apiresponse.RespondError(c, http.StatusBadRequest, "La solicitud contiene datos invalidos", apierrors.Validation, publicValidationErrorDetail)
+		return
+	}
+
+	if input.Nombre == "" || input.Precio <= 0 {
 		apiresponse.RespondError(c, http.StatusBadRequest, "La solicitud contiene datos invalidos", apierrors.Validation, publicValidationErrorDetail)
 		return
 	}
@@ -150,20 +119,6 @@ func (h *ProductoHandler) CrearProducto(c *gin.Context) {
 	apiresponse.RespondSuccess(c, http.StatusCreated, "Recurso creado correctamente", input)
 }
 
-// ActualizarProducto updates an existing product
-// @Summary Update a product
-// @Description Update a product by ID. Provide fields to update.
-// @Tags Productos
-// @Accept json
-// @Produce json
-// @Param id path string true "Product ID (UUID)"
-// @Param product body models.Producto true "Updated product data"
-// @Success 200 {object} map[string]interface{} "status:success,message:Recurso actualizado correctamente,data:Producto"
-// @Failure 400 {object} map[string]interface{} "status:error (invalid UUID or validation error)"
-// @Failure 404 {object} map[string]interface{} "status:error (product not found)"
-// @Failure 429 {object} map[string]interface{} "status:error (rate limit exceeded)"
-// @Failure 500 {object} map[string]interface{} "status:error (database error)"
-// @Router /api/v1/productos/{id} [put]
 func (h *ProductoHandler) ActualizarProducto(c *gin.Context) {
 	id, err := uuid.Parse(c.Param("id"))
 	if err != nil {
@@ -180,7 +135,7 @@ func (h *ProductoHandler) ActualizarProducto(c *gin.Context) {
 
 	producto, err := h.service.Update(c.Request.Context(), id, &input)
 	if err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
+		if errors.Is(err, domain.ErrNotFound) {
 			apiresponse.RespondError(c, http.StatusNotFound, "No se encontro el recurso solicitado", apierrors.NotFound, "producto no encontrado")
 			return
 		}
@@ -193,19 +148,6 @@ func (h *ProductoHandler) ActualizarProducto(c *gin.Context) {
 	apiresponse.RespondSuccess(c, http.StatusOK, "Recurso actualizado correctamente", producto)
 }
 
-// EliminarProducto deletes (soft delete) a product
-// @Summary Delete a product
-// @Description Soft delete a product by ID (marks as deleted, does not remove from database)
-// @Tags Productos
-// @Accept json
-// @Produce json
-// @Param id path string true "Product ID (UUID)"
-// @Success 200 {object} map[string]interface{} "status:success,message:Recurso eliminado correctamente,data:deleted:true"
-// @Failure 400 {object} map[string]interface{} "status:error (invalid UUID)"
-// @Failure 404 {object} map[string]interface{} "status:error (product not found)"
-// @Failure 429 {object} map[string]interface{} "status:error (rate limit exceeded)"
-// @Failure 500 {object} map[string]interface{} "status:error (database error)"
-// @Router /api/v1/productos/{id} [delete]
 func (h *ProductoHandler) EliminarProducto(c *gin.Context) {
 	id, err := uuid.Parse(c.Param("id"))
 	if err != nil {
@@ -214,7 +156,7 @@ func (h *ProductoHandler) EliminarProducto(c *gin.Context) {
 	}
 
 	if err := h.service.Delete(c.Request.Context(), id); err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
+		if errors.Is(err, domain.ErrNotFound) {
 			apiresponse.RespondError(c, http.StatusNotFound, "No se encontro el recurso solicitado", apierrors.NotFound, "producto no encontrado")
 			return
 		}

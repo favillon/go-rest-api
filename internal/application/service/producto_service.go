@@ -4,11 +4,11 @@ import (
 	"context"
 	"errors"
 
+	"backend-productos/internal/domain"
 	"backend-productos/internal/domain/model"
 	"backend-productos/internal/domain/port"
 
 	"github.com/google/uuid"
-	"gorm.io/gorm"
 )
 
 type ProductoService struct {
@@ -26,7 +26,7 @@ func (s *ProductoService) GetAll(ctx context.Context, page, limit int) ([]model.
 func (s *ProductoService) GetByID(ctx context.Context, id uuid.UUID) (*model.Producto, error) {
 	producto, err := s.repo.GetByID(ctx, id)
 	if err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
+		if errors.Is(err, domain.ErrNotFound) {
 			return nil, err
 		}
 		return nil, err

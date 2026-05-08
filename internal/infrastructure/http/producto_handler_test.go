@@ -1,26 +1,57 @@
-package http
+package http_test
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
-	"time"
 
 	apierrors "backend-productos/api/errors"
 	"backend-productos/internal/application/service"
+	"backend-productos/internal/domain"
 	"backend-productos/internal/domain/model"
-	"backend-productos/internal/infrastructure/persistence"
+	httpHandler "backend-productos/internal/infrastructure/http"
 
-	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
-	"gorm.io/driver/postgres"
-	"gorm.io/gorm"
+	"github.com/stretchr/testify/mock"
 )
+
+type MockProductoRepository struct {
+	mock.Mock
+}
+
+func (m *MockProductoRepository) GetAll(ctx context.Context, page, limit int) ([]model.Producto, error) {
+	args := m.Called(ctx, page, limit)
+	return args.Get(0).([]model.Producto), args.Error(1)
+}
+
+func (m *MockProductoRepository) GetByID(ctx context.Context, id uuid.UUID) (*model.Producto, error) {
+	args := m.Called(ctx, id)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*model.Producto), args.Error(1)
+}
+
+func (m *MockProductoRepository) Create(ctx context.Context, p *model.Producto) error {
+	args := m.Called(ctx, p)
+	return args.Error(0)
+}
+
+func (m *MockProductoRepository) Update(ctx context.Context, p *model.Producto) error {
+	args := m.Called(ctx, p)
+	return args.Error(0)
+}
+
+func (m *MockProductoRepository) Delete(ctx context.Context, id uuid.UUID) error {
+	args := m.Called(ctx, id)
+	return args.Error(0)
+}
 
 type apiErrorResponse struct {
 	Code    string `json:"code"`
@@ -42,34 +73,15 @@ func decodeAPIResponse(t *testing.T, body []byte) apiResponse {
 	return response
 }
 
-func setupTestDB(t *testing.T) (*gorm.DB, sqlmock.Sqlmock) {
-	t.Helper()
-	dbMock, mock, err := sqlmock.New()
-	assert.NoError(t, err)
-
-	dialector := postgres.New(postgres.Config{
-		Conn: dbMock,
-	})
-	db, err := gorm.Open(dialector, &gorm.Config{})
-	assert.NoError(t, err)
-
-	t.Cleanup(func() {
-		_ = dbMock.Close()
-	})
-
-	return db, mock
-}
-
-func newTestHandler(db *gorm.DB) *ProductoHandler {
-	repo := persistence.NewProductoRepository(db)
-	svc := service.NewProductoService(repo)
-	return NewProductoHandler(svc)
+func newTestHandler(mockRepo *MockProductoRepository) *httpHandler.ProductoHandler {
+	svc := service.NewProductoService(mockRepo)
+	return httpHandler.NewProductoHandler(svc)
 }
 
 func TestCrearProducto_Exito(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	db, mock := setupTestDB(t)
-	handler := newTestHandler(db)
+	mockRepo := new(MockProductoRepository)
+	handler := newTestHandler(mockRepo)
 
 	r := gin.Default()
 	r.POST("/productos", handler.CrearProducto)
@@ -80,10 +92,7 @@ func TestCrearProducto_Exito(t *testing.T) {
 	}
 	jsonValue, _ := json.Marshal(productoReq)
 
-	mock.ExpectBegin()
-	mock.ExpectQuery(`INSERT INTO "productos"`).
-		WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow("550e8400-e29b-41d4-a716-446655440000"))
-	mock.ExpectCommit()
+	mockRepo.On("Create", mock.Anything, mock.AnythingOfType("*model.Producto")).Return(nil)
 
 	req, _ := http.NewRequest("POST", "/productos", bytes.NewBuffer(jsonValue))
 	w := httptest.NewRecorder()
@@ -99,12 +108,13 @@ func TestCrearProducto_Exito(t *testing.T) {
 	assert.Equal(t, "success", response.Status)
 	assert.Equal(t, "Recurso creado correctamente", response.Message)
 	assert.Equal(t, "Producto Test", data.Nombre)
+	mockRepo.AssertExpectations(t)
 }
 
 func TestCrearProducto_ValidacionFallida(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	db, _ := setupTestDB(t)
-	handler := newTestHandler(db)
+	mockRepo := new(MockProductoRepository)
+	handler := newTestHandler(mockRepo)
 
 	r := gin.Default()
 	r.POST("/productos", handler.CrearProducto)
@@ -126,8 +136,8 @@ func TestCrearProducto_ValidacionFallida(t *testing.T) {
 
 func TestCrearProducto_ErrorDBCreate(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	db, mock := setupTestDB(t)
-	handler := newTestHandler(db)
+	mockRepo := new(MockProductoRepository)
+	handler := newTestHandler(mockRepo)
 
 	r := gin.Default()
 	r.POST("/productos", handler.CrearProducto)
@@ -138,9 +148,7 @@ func TestCrearProducto_ErrorDBCreate(t *testing.T) {
 	}
 	jsonValue, _ := json.Marshal(productoReq)
 
-	mock.ExpectBegin()
-	mock.ExpectQuery(`INSERT INTO "productos"`).WillReturnError(errors.New("db failure"))
-	mock.ExpectRollback()
+	mockRepo.On("Create", mock.Anything, mock.AnythingOfType("*model.Producto")).Return(errors.New("db failure"))
 
 	req, _ := http.NewRequest("POST", "/productos", bytes.NewBuffer(jsonValue))
 	w := httptest.NewRecorder()
@@ -152,27 +160,22 @@ func TestCrearProducto_ErrorDBCreate(t *testing.T) {
 	assert.Equal(t, "error", response.Status)
 	assert.Equal(t, string(apierrors.Database), response.Error.Code)
 	assert.Equal(t, "internal server error", response.Error.Message)
-	assert.NoError(t, mock.ExpectationsWereMet())
+	mockRepo.AssertExpectations(t)
 }
 
 func TestActualizarProducto_Exito(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	db, mock := setupTestDB(t)
-	handler := newTestHandler(db)
+	mockRepo := new(MockProductoRepository)
+	handler := newTestHandler(mockRepo)
 
 	r := gin.Default()
 	r.PUT("/productos/:id", handler.ActualizarProducto)
 
 	productoID := "550e8400-e29b-41d4-a716-446655440000"
-	now := time.Now()
+	existente := &model.Producto{ID: uuid.MustParse(productoID), Nombre: "Producto viejo", Descripcion: "Descripcion vieja", Precio: 10.50}
 
-	mock.ExpectQuery(`SELECT .* FROM "productos"`).
-		WillReturnRows(sqlmock.NewRows([]string{"id", "nombre", "descripcion", "precio", "created_at", "updated_at", "deleted_at"}).
-			AddRow(productoID, "Producto viejo", "Descripcion vieja", 10.50, now, now, nil))
-
-	mock.ExpectBegin()
-	mock.ExpectExec(`UPDATE "productos"`).WillReturnResult(sqlmock.NewResult(0, 1))
-	mock.ExpectCommit()
+	mockRepo.On("GetByID", mock.Anything, uuid.MustParse(productoID)).Return(existente, nil)
+	mockRepo.On("Update", mock.Anything, mock.AnythingOfType("*model.Producto")).Return(nil)
 
 	payload := []byte(`{"nombre":"Producto actualizado","descripcion":"Descripcion nueva","precio":20.75}`)
 	req, _ := http.NewRequest("PUT", "/productos/"+productoID, bytes.NewBuffer(payload))
@@ -192,13 +195,13 @@ func TestActualizarProducto_Exito(t *testing.T) {
 	assert.Equal(t, "Producto actualizado", data.Nombre)
 	assert.Equal(t, "Descripcion nueva", data.Descripcion)
 	assert.Equal(t, 20.75, data.Precio)
-	assert.NoError(t, mock.ExpectationsWereMet())
+	mockRepo.AssertExpectations(t)
 }
 
 func TestActualizarProducto_IDInvalido(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	db, _ := setupTestDB(t)
-	handler := newTestHandler(db)
+	mockRepo := new(MockProductoRepository)
+	handler := newTestHandler(mockRepo)
 
 	r := gin.Default()
 	r.PUT("/productos/:id", handler.ActualizarProducto)
@@ -218,16 +221,15 @@ func TestActualizarProducto_IDInvalido(t *testing.T) {
 
 func TestActualizarProducto_NoEncontrado(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	db, mock := setupTestDB(t)
-	handler := newTestHandler(db)
+	mockRepo := new(MockProductoRepository)
+	handler := newTestHandler(mockRepo)
 
 	r := gin.Default()
 	r.PUT("/productos/:id", handler.ActualizarProducto)
 
 	productoID := "550e8400-e29b-41d4-a716-446655440001"
 
-	mock.ExpectQuery(`SELECT .* FROM "productos"`).
-		WillReturnRows(sqlmock.NewRows([]string{"id", "nombre", "descripcion", "precio", "created_at", "updated_at", "deleted_at"}))
+	mockRepo.On("GetByID", mock.Anything, uuid.MustParse(productoID)).Return((*model.Producto)(nil), domain.ErrNotFound)
 
 	payload := []byte(`{"nombre":"Producto actualizado","descripcion":"Descripcion nueva","precio":20.75}`)
 	req, _ := http.NewRequest("PUT", "/productos/"+productoID, bytes.NewBuffer(payload))
@@ -240,13 +242,13 @@ func TestActualizarProducto_NoEncontrado(t *testing.T) {
 	assert.Equal(t, "error", response.Status)
 	assert.Equal(t, string(apierrors.NotFound), response.Error.Code)
 	assert.Equal(t, "producto no encontrado", response.Error.Message)
-	assert.NoError(t, mock.ExpectationsWereMet())
+	mockRepo.AssertExpectations(t)
 }
 
 func TestActualizarProducto_PayloadInvalido(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	db, _ := setupTestDB(t)
-	handler := newTestHandler(db)
+	mockRepo := new(MockProductoRepository)
+	handler := newTestHandler(mockRepo)
 
 	r := gin.Default()
 	r.PUT("/productos/:id", handler.ActualizarProducto)
@@ -268,14 +270,14 @@ func TestActualizarProducto_PayloadInvalido(t *testing.T) {
 
 func TestActualizarProducto_ErrorDB(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	db, mock := setupTestDB(t)
-	handler := newTestHandler(db)
+	mockRepo := new(MockProductoRepository)
+	handler := newTestHandler(mockRepo)
 
 	r := gin.Default()
 	r.PUT("/productos/:id", handler.ActualizarProducto)
 
 	productoID := "550e8400-e29b-41d4-a716-446655440003"
-	mock.ExpectQuery(`SELECT .* FROM "productos"`).WillReturnError(errors.New("db failure"))
+	mockRepo.On("GetByID", mock.Anything, uuid.MustParse(productoID)).Return((*model.Producto)(nil), errors.New("db failure"))
 
 	payload := []byte(`{"nombre":"Producto actualizado","descripcion":"Descripcion nueva","precio":20.75}`)
 	req, _ := http.NewRequest("PUT", "/productos/"+productoID, bytes.NewBuffer(payload))
@@ -288,27 +290,22 @@ func TestActualizarProducto_ErrorDB(t *testing.T) {
 	assert.Equal(t, "error", response.Status)
 	assert.Equal(t, string(apierrors.Database), response.Error.Code)
 	assert.Equal(t, "internal server error", response.Error.Message)
-	assert.NoError(t, mock.ExpectationsWereMet())
+	mockRepo.AssertExpectations(t)
 }
 
 func TestActualizarProducto_ErrorDBUpdate(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	db, mock := setupTestDB(t)
-	handler := newTestHandler(db)
+	mockRepo := new(MockProductoRepository)
+	handler := newTestHandler(mockRepo)
 
 	r := gin.Default()
 	r.PUT("/productos/:id", handler.ActualizarProducto)
 
 	productoID := "550e8400-e29b-41d4-a716-446655440004"
-	now := time.Now()
+	existente := &model.Producto{ID: uuid.MustParse(productoID), Nombre: "Producto viejo", Descripcion: "Descripcion vieja", Precio: 10.50}
 
-	mock.ExpectQuery(`SELECT .* FROM "productos"`).
-		WillReturnRows(sqlmock.NewRows([]string{"id", "nombre", "descripcion", "precio", "created_at", "updated_at", "deleted_at"}).
-			AddRow(productoID, "Producto viejo", "Descripcion vieja", 10.50, now, now, nil))
-
-	mock.ExpectBegin()
-	mock.ExpectExec(`UPDATE "productos"`).WillReturnError(errors.New("db failure"))
-	mock.ExpectRollback()
+	mockRepo.On("GetByID", mock.Anything, uuid.MustParse(productoID)).Return(existente, nil)
+	mockRepo.On("Update", mock.Anything, mock.AnythingOfType("*model.Producto")).Return(errors.New("db failure"))
 
 	payload := []byte(`{"nombre":"Producto actualizado","descripcion":"Descripcion nueva","precio":20.75}`)
 	req, _ := http.NewRequest("PUT", "/productos/"+productoID, bytes.NewBuffer(payload))
@@ -321,22 +318,23 @@ func TestActualizarProducto_ErrorDBUpdate(t *testing.T) {
 	assert.Equal(t, "error", response.Status)
 	assert.Equal(t, string(apierrors.Database), response.Error.Code)
 	assert.Equal(t, "internal server error", response.Error.Message)
-	assert.NoError(t, mock.ExpectationsWereMet())
+	mockRepo.AssertExpectations(t)
 }
 
 func TestObtenerProductos_Exito(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	db, mock := setupTestDB(t)
-	handler := newTestHandler(db)
+	mockRepo := new(MockProductoRepository)
+	handler := newTestHandler(mockRepo)
 
 	r := gin.Default()
 	r.GET("/productos", handler.ObtenerProductos)
 
-	now := time.Now()
-	mock.ExpectQuery(`SELECT .* FROM "productos"`).
-		WillReturnRows(sqlmock.NewRows([]string{"id", "nombre", "descripcion", "precio", "created_at", "updated_at", "deleted_at"}).
-			AddRow("550e8400-e29b-41d4-a716-446655440010", "Teclado", "Mecanico", 99.99, now, now, nil).
-			AddRow("550e8400-e29b-41d4-a716-446655440011", "Mouse", "Inalambrico", 49.50, now, now, nil))
+	productos := []model.Producto{
+		{ID: uuid.MustParse("550e8400-e29b-41d4-a716-446655440010"), Nombre: "Teclado", Descripcion: "Mecanico", Precio: 99.99},
+		{ID: uuid.MustParse("550e8400-e29b-41d4-a716-446655440011"), Nombre: "Mouse", Descripcion: "Inalambrico", Precio: 49.50},
+	}
+
+	mockRepo.On("GetAll", mock.Anything, 1, 20).Return(productos, nil)
 
 	req, _ := http.NewRequest("GET", "/productos", nil)
 	w := httptest.NewRecorder()
@@ -356,21 +354,22 @@ func TestObtenerProductos_Exito(t *testing.T) {
 	assert.Equal(t, 99.99, data[0].Precio)
 	assert.Equal(t, "Mouse", data[1].Nombre)
 	assert.Equal(t, 49.50, data[1].Precio)
-	assert.NoError(t, mock.ExpectationsWereMet())
+	mockRepo.AssertExpectations(t)
 }
 
 func TestObtenerProductos_PaginacionConParametros(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	db, mock := setupTestDB(t)
-	handler := newTestHandler(db)
+	mockRepo := new(MockProductoRepository)
+	handler := newTestHandler(mockRepo)
 
 	r := gin.Default()
 	r.GET("/productos", handler.ObtenerProductos)
 
-	now := time.Now()
-	mock.ExpectQuery(`SELECT .* FROM "productos"`).
-		WillReturnRows(sqlmock.NewRows([]string{"id", "nombre", "descripcion", "precio", "created_at", "updated_at", "deleted_at"}).
-			AddRow("550e8400-e29b-41d4-a716-446655440012", "Audifonos", "Noise cancelling", 120.0, now, now, nil))
+	productos := []model.Producto{
+		{ID: uuid.MustParse("550e8400-e29b-41d4-a716-446655440012"), Nombre: "Audifonos", Descripcion: "Noise cancelling", Precio: 120.0},
+	}
+
+	mockRepo.On("GetAll", mock.Anything, 2, 1).Return(productos, nil)
 
 	req, _ := http.NewRequest("GET", "/productos?page=2&limit=1", nil)
 	w := httptest.NewRecorder()
@@ -387,13 +386,13 @@ func TestObtenerProductos_PaginacionConParametros(t *testing.T) {
 	assert.Equal(t, "Datos recuperados correctamente", response.Message)
 	assert.Len(t, data, 1)
 	assert.Equal(t, "Audifonos", data[0].Nombre)
-	assert.NoError(t, mock.ExpectationsWereMet())
+	mockRepo.AssertExpectations(t)
 }
 
 func TestObtenerProductos_PaginacionInvalida(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	db, _ := setupTestDB(t)
-	handler := newTestHandler(db)
+	mockRepo := new(MockProductoRepository)
+	handler := newTestHandler(mockRepo)
 
 	r := gin.Default()
 	r.GET("/productos", handler.ObtenerProductos)
@@ -411,18 +410,16 @@ func TestObtenerProductos_PaginacionInvalida(t *testing.T) {
 
 func TestObtenerProductoPorID_Exito(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	db, mock := setupTestDB(t)
-	handler := newTestHandler(db)
+	mockRepo := new(MockProductoRepository)
+	handler := newTestHandler(mockRepo)
 
 	r := gin.Default()
 	r.GET("/productos/:id", handler.ObtenerProductoPorID)
 
 	productoID := "550e8400-e29b-41d4-a716-446655440020"
-	now := time.Now()
+	producto := &model.Producto{ID: uuid.MustParse(productoID), Nombre: "Monitor", Descripcion: "4K", Precio: 299.90}
 
-	mock.ExpectQuery(`SELECT .* FROM "productos"`).
-		WillReturnRows(sqlmock.NewRows([]string{"id", "nombre", "descripcion", "precio", "created_at", "updated_at", "deleted_at"}).
-			AddRow(productoID, "Monitor", "4K", 299.90, now, now, nil))
+	mockRepo.On("GetByID", mock.Anything, uuid.MustParse(productoID)).Return(producto, nil)
 
 	req, _ := http.NewRequest("GET", "/productos/"+productoID, nil)
 	w := httptest.NewRecorder()
@@ -441,13 +438,13 @@ func TestObtenerProductoPorID_Exito(t *testing.T) {
 	assert.Equal(t, "Monitor", data.Nombre)
 	assert.Equal(t, "4K", data.Descripcion)
 	assert.Equal(t, 299.90, data.Precio)
-	assert.NoError(t, mock.ExpectationsWereMet())
+	mockRepo.AssertExpectations(t)
 }
 
 func TestObtenerProductoPorID_IDInvalido(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	db, _ := setupTestDB(t)
-	handler := newTestHandler(db)
+	mockRepo := new(MockProductoRepository)
+	handler := newTestHandler(mockRepo)
 
 	r := gin.Default()
 	r.GET("/productos/:id", handler.ObtenerProductoPorID)
@@ -466,16 +463,15 @@ func TestObtenerProductoPorID_IDInvalido(t *testing.T) {
 
 func TestObtenerProductoPorID_NoEncontrado(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	db, mock := setupTestDB(t)
-	handler := newTestHandler(db)
+	mockRepo := new(MockProductoRepository)
+	handler := newTestHandler(mockRepo)
 
 	r := gin.Default()
 	r.GET("/productos/:id", handler.ObtenerProductoPorID)
 
 	productoID := "550e8400-e29b-41d4-a716-446655440021"
 
-	mock.ExpectQuery(`SELECT .* FROM "productos"`).
-		WillReturnRows(sqlmock.NewRows([]string{"id", "nombre", "descripcion", "precio", "created_at", "updated_at", "deleted_at"}))
+	mockRepo.On("GetByID", mock.Anything, uuid.MustParse(productoID)).Return((*model.Producto)(nil), domain.ErrNotFound)
 
 	req, _ := http.NewRequest("GET", "/productos/"+productoID, nil)
 	w := httptest.NewRecorder()
@@ -487,18 +483,18 @@ func TestObtenerProductoPorID_NoEncontrado(t *testing.T) {
 	assert.Equal(t, "error", response.Status)
 	assert.Equal(t, string(apierrors.NotFound), response.Error.Code)
 	assert.Equal(t, "producto no encontrado", response.Error.Message)
-	assert.NoError(t, mock.ExpectationsWereMet())
+	mockRepo.AssertExpectations(t)
 }
 
 func TestObtenerProductos_ErrorDB(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	db, mock := setupTestDB(t)
-	handler := newTestHandler(db)
+	mockRepo := new(MockProductoRepository)
+	handler := newTestHandler(mockRepo)
 
 	r := gin.Default()
 	r.GET("/productos", handler.ObtenerProductos)
 
-	mock.ExpectQuery(`SELECT .* FROM "productos"`).WillReturnError(errors.New("db failure"))
+	mockRepo.On("GetAll", mock.Anything, 1, 20).Return([]model.Producto{}, errors.New("db failure"))
 
 	req, _ := http.NewRequest("GET", "/productos", nil)
 	w := httptest.NewRecorder()
@@ -510,19 +506,19 @@ func TestObtenerProductos_ErrorDB(t *testing.T) {
 	assert.Equal(t, "error", response.Status)
 	assert.Equal(t, string(apierrors.Database), response.Error.Code)
 	assert.Equal(t, "internal server error", response.Error.Message)
-	assert.NoError(t, mock.ExpectationsWereMet())
+	mockRepo.AssertExpectations(t)
 }
 
 func TestObtenerProductoPorID_ErrorDB(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	db, mock := setupTestDB(t)
-	handler := newTestHandler(db)
+	mockRepo := new(MockProductoRepository)
+	handler := newTestHandler(mockRepo)
 
 	r := gin.Default()
 	r.GET("/productos/:id", handler.ObtenerProductoPorID)
 
 	productoID := "550e8400-e29b-41d4-a716-446655440022"
-	mock.ExpectQuery(`SELECT .* FROM "productos"`).WillReturnError(errors.New("db failure"))
+	mockRepo.On("GetByID", mock.Anything, uuid.MustParse(productoID)).Return((*model.Producto)(nil), errors.New("db failure"))
 
 	req, _ := http.NewRequest("GET", "/productos/"+productoID, nil)
 	w := httptest.NewRecorder()
@@ -534,27 +530,22 @@ func TestObtenerProductoPorID_ErrorDB(t *testing.T) {
 	assert.Equal(t, "error", response.Status)
 	assert.Equal(t, string(apierrors.Database), response.Error.Code)
 	assert.Equal(t, "internal server error", response.Error.Message)
-	assert.NoError(t, mock.ExpectationsWereMet())
+	mockRepo.AssertExpectations(t)
 }
 
 func TestEliminarProducto_Exito(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	db, mock := setupTestDB(t)
-	handler := newTestHandler(db)
+	mockRepo := new(MockProductoRepository)
+	handler := newTestHandler(mockRepo)
 
 	r := gin.Default()
 	r.DELETE("/productos/:id", handler.EliminarProducto)
 
 	productoID := "550e8400-e29b-41d4-a716-446655440030"
-	now := time.Now()
+	existente := &model.Producto{ID: uuid.MustParse(productoID), Nombre: "Camara", Descripcion: "HD", Precio: 149.99}
 
-	mock.ExpectQuery(`SELECT .* FROM "productos"`).
-		WillReturnRows(sqlmock.NewRows([]string{"id", "nombre", "descripcion", "precio", "created_at", "updated_at", "deleted_at"}).
-			AddRow(productoID, "Camara", "HD", 149.99, now, now, nil))
-
-	mock.ExpectBegin()
-	mock.ExpectExec(`UPDATE "productos"`).WillReturnResult(sqlmock.NewResult(0, 1))
-	mock.ExpectCommit()
+	mockRepo.On("GetByID", mock.Anything, uuid.MustParse(productoID)).Return(existente, nil)
+	mockRepo.On("Delete", mock.Anything, uuid.MustParse(productoID)).Return(nil)
 
 	req, _ := http.NewRequest("DELETE", "/productos/"+productoID, nil)
 	w := httptest.NewRecorder()
@@ -570,13 +561,13 @@ func TestEliminarProducto_Exito(t *testing.T) {
 	assert.Equal(t, "success", response.Status)
 	assert.Equal(t, "Recurso eliminado correctamente", response.Message)
 	assert.Equal(t, true, data["deleted"])
-	assert.NoError(t, mock.ExpectationsWereMet())
+	mockRepo.AssertExpectations(t)
 }
 
 func TestEliminarProducto_IDInvalido(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	db, _ := setupTestDB(t)
-	handler := newTestHandler(db)
+	mockRepo := new(MockProductoRepository)
+	handler := newTestHandler(mockRepo)
 
 	r := gin.Default()
 	r.DELETE("/productos/:id", handler.EliminarProducto)
@@ -595,15 +586,14 @@ func TestEliminarProducto_IDInvalido(t *testing.T) {
 
 func TestEliminarProducto_NoEncontrado(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	db, mock := setupTestDB(t)
-	handler := newTestHandler(db)
+	mockRepo := new(MockProductoRepository)
+	handler := newTestHandler(mockRepo)
 
 	r := gin.Default()
 	r.DELETE("/productos/:id", handler.EliminarProducto)
 
 	productoID := "550e8400-e29b-41d4-a716-446655440031"
-	mock.ExpectQuery(`SELECT .* FROM "productos"`).
-		WillReturnRows(sqlmock.NewRows([]string{"id", "nombre", "descripcion", "precio", "created_at", "updated_at", "deleted_at"}))
+	mockRepo.On("GetByID", mock.Anything, uuid.MustParse(productoID)).Return((*model.Producto)(nil), domain.ErrNotFound)
 
 	req, _ := http.NewRequest("DELETE", "/productos/"+productoID, nil)
 	w := httptest.NewRecorder()
@@ -615,19 +605,19 @@ func TestEliminarProducto_NoEncontrado(t *testing.T) {
 	assert.Equal(t, "error", response.Status)
 	assert.Equal(t, string(apierrors.NotFound), response.Error.Code)
 	assert.Equal(t, "producto no encontrado", response.Error.Message)
-	assert.NoError(t, mock.ExpectationsWereMet())
+	mockRepo.AssertExpectations(t)
 }
 
 func TestEliminarProducto_ErrorDB(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	db, mock := setupTestDB(t)
-	handler := newTestHandler(db)
+	mockRepo := new(MockProductoRepository)
+	handler := newTestHandler(mockRepo)
 
 	r := gin.Default()
 	r.DELETE("/productos/:id", handler.EliminarProducto)
 
 	productoID := "550e8400-e29b-41d4-a716-446655440032"
-	mock.ExpectQuery(`SELECT .* FROM "productos"`).WillReturnError(errors.New("db failure"))
+	mockRepo.On("GetByID", mock.Anything, uuid.MustParse(productoID)).Return((*model.Producto)(nil), errors.New("db failure"))
 
 	req, _ := http.NewRequest("DELETE", "/productos/"+productoID, nil)
 	w := httptest.NewRecorder()
@@ -639,27 +629,22 @@ func TestEliminarProducto_ErrorDB(t *testing.T) {
 	assert.Equal(t, "error", response.Status)
 	assert.Equal(t, string(apierrors.Database), response.Error.Code)
 	assert.Equal(t, "internal server error", response.Error.Message)
-	assert.NoError(t, mock.ExpectationsWereMet())
+	mockRepo.AssertExpectations(t)
 }
 
 func TestEliminarProducto_ErrorDBDelete(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	db, mock := setupTestDB(t)
-	handler := newTestHandler(db)
+	mockRepo := new(MockProductoRepository)
+	handler := newTestHandler(mockRepo)
 
 	r := gin.Default()
 	r.DELETE("/productos/:id", handler.EliminarProducto)
 
 	productoID := "550e8400-e29b-41d4-a716-446655440033"
-	now := time.Now()
+	existente := &model.Producto{ID: uuid.MustParse(productoID), Nombre: "Camara", Descripcion: "HD", Precio: 149.99}
 
-	mock.ExpectQuery(`SELECT .* FROM "productos"`).
-		WillReturnRows(sqlmock.NewRows([]string{"id", "nombre", "descripcion", "precio", "created_at", "updated_at", "deleted_at"}).
-			AddRow(productoID, "Camara", "HD", 149.99, now, now, nil))
-
-	mock.ExpectBegin()
-	mock.ExpectExec(`UPDATE "productos"`).WillReturnError(errors.New("db failure"))
-	mock.ExpectRollback()
+	mockRepo.On("GetByID", mock.Anything, uuid.MustParse(productoID)).Return(existente, nil)
+	mockRepo.On("Delete", mock.Anything, uuid.MustParse(productoID)).Return(errors.New("db failure"))
 
 	req, _ := http.NewRequest("DELETE", "/productos/"+productoID, nil)
 	w := httptest.NewRecorder()
@@ -671,5 +656,5 @@ func TestEliminarProducto_ErrorDBDelete(t *testing.T) {
 	assert.Equal(t, "error", response.Status)
 	assert.Equal(t, string(apierrors.Database), response.Error.Code)
 	assert.Equal(t, "internal server error", response.Error.Message)
-	assert.NoError(t, mock.ExpectationsWereMet())
+	mockRepo.AssertExpectations(t)
 }
