@@ -24,7 +24,7 @@ ENV PORT_APP=${PORT_APP}
 
 EXPOSE ${PORT_APP}
 
-HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 \
+HEALTHCHECK --interval=1m --timeout=10s --start-period=60s --retries=3 \
   CMD curl --fail --silent --show-error http://localhost:${PORT_APP}/api/v1/graphql >/dev/null || exit 1
 
 CMD ["./main"]

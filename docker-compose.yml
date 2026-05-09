@@ -36,6 +36,12 @@ services:
       RATE_LIMIT_WRITE_PER_MINUTE: ${RATE_LIMIT_WRITE_PER_MINUTE:-10}
     env_file:
       - .env.docker
+    healthcheck:
+      test: ["CMD-SHELL", "curl --fail --silent --show-error http://localhost:${PORT_APP:-8082}/api/v1/graphql >/dev/null || exit 1"]
+      interval: 1m
+      timeout: 10s
+      start_period: 60s
+      retries: 3
     depends_on:
       mongodb:
         condition: service_healthy
