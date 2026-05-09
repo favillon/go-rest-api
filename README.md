@@ -1,6 +1,6 @@
 # Backend Productos
 
-API REST + GraphQL en Go usando arquitectura hexagonal (puertos y adaptadores), Gin, gqlgen y MongoDB.
+API GraphQL en Go usando arquitectura hexagonal (puertos y adaptadores), Gin, gqlgen y MongoDB.
 
 <div style="display:flex; flex-wrap:wrap; gap:12px; align-items:center;">
 
@@ -86,63 +86,6 @@ La API queda disponible en:
 
 ```bash
 http://localhost:${PORT_APP}
-```
-
-## Documentacion Swagger / OpenAPI
-
-La API expone Swagger UI en:
-
-```bash
-http://localhost:${PORT_APP}/swagger/index.html
-```
-
-### Regenerar documentacion
-
-```bash
-go run github.com/swaggo/swag/cmd/swag@latest init
-```
-
-Esto actualiza `docs/docs.go`, `docs/swagger.json`, `docs/swagger.yaml`.
-
-Notas:
-
-- `docs/swagger.json` y `docs/swagger.yaml` estan en `.gitignore`.
-- `docs/docs.go` se mantiene en el repositorio.
-
-## Endpoints REST
-
-Prefijo base: `/api/v1`
-
-| Metodo | Ruta | Descripcion |
-|--------|------|-------------|
-| `GET` | `/api/v1/productos` | Lista productos (paginado) |
-| `GET` | `/api/v1/productos/:id` | Obtiene un producto por UUID |
-| `POST` | `/api/v1/productos` | Crea un producto |
-| `PUT` | `/api/v1/productos/:id` | Actualiza un producto |
-| `DELETE` | `/api/v1/productos/:id` | Elimina un producto (soft delete) |
-
-Ejemplos:
-
-```bash
-# Listar productos
-curl http://localhost:8082/api/v1/productos
-curl http://localhost:8082/api/v1/productos?page=1&limit=10
-
-# Obtener por ID
-curl http://localhost:8082/api/v1/productos/<uuid>
-
-# Crear producto
-curl -X POST http://localhost:8082/api/v1/productos \
-  -H "Content-Type: application/json" \
-  -d '{"nombre":"Laptop Dell","descripcion":"XPS 15","precio":1299.99}'
-
-# Actualizar producto
-curl -X PUT http://localhost:8082/api/v1/productos/<uuid> \
-  -H "Content-Type: application/json" \
-  -d '{"nombre":"Laptop Dell XPS","precio":1199.99}'
-
-# Eliminar producto
-curl -X DELETE http://localhost:8082/api/v1/productos/<uuid>
 ```
 
 ## GraphQL
@@ -273,35 +216,6 @@ mutation {
 }
 ```
 
-## Rate limiting
-
-Los limites de solicitudes por IP se configuran mediante variables de entorno:
-
-- `RATE_LIMIT_READ_PER_MINUTE`: limite para endpoints de lectura (`GET`). Default: `30`
-- `RATE_LIMIT_WRITE_PER_MINUTE`: limite para endpoints de escritura (`POST`, `PUT`, `DELETE`). Default: `10`
-
-Ventana de tiempo: 1 minuto.
-
-Los headers `X-RateLimit-Limit` y `X-RateLimit-Remaining` se incluyen en cada respuesta. Al exceder el limite se devuelve `429` con header `Retry-After`.
-
-## Catalogo de codigos de error
-
-Fuente de verdad en codigo:
-
-- `api/errors/codes.go`
-- `api/response/response.go`
-
-Codigos actuales:
-
-| Codigo | HTTP | Descripcion |
-|--------|------|-------------|
-| `DB_NOT_INITIALIZED` | 500 | Conexion a DB no inicializada |
-| `DATABASE_ERROR` | 500 | Error en operacion de DB |
-| `INVALID_PARAMETER` | 400 | Parametro invalido |
-| `VALIDATION_ERROR` | 400 | Payload invalido |
-| `RESOURCE_NOT_FOUND` | 404 | Recurso no existe |
-| `RATE_LIMIT_EXCEEDED` | 429 | Limite de solicitudes excedido |
-
 ## Arquitectura Hexagonal
 
 Este proyecto utiliza **arquitectura hexagonal** (puertos y adaptadores).
@@ -359,21 +273,19 @@ resolver := &graph.Resolver{
 
 ## Resumen de testing
 
-El proyecto cuenta con **35 tests** distribuidos en 2 capas:
+El proyecto cuenta con **13 tests** en la capa de servicio:
 
 | Capa | Archivo | Tests | Cobertura |
 |------|---------|-------|-----------|
 | **Service** | `internal/application/service/producto_service_test.go` | 13 | 100% |
-| **Handler** | `internal/infrastructure/http/producto_handler_test.go` | 22 | ~97% |
 
-Casos cubiertos por endpoint:
+Casos cubiertos:
 
-- **Crear producto**: exito, validacion fallida, error DB
-- **Obtener productos**: exito, paginacion valida, paginacion invalida, error DB
-- **Obtener producto por ID**: exito, ID invalido, no encontrado, error DB
-- **Actualizar producto**: exito, ID invalido, no encontrado, payload invalido, error DB lookup, error DB update
-- **Eliminar producto**: exito, ID invalido, no encontrado, error DB lookup, error DB delete
-- **Service**: GetAll, GetByID, Create, Update, Delete (exito, not found, error)
+- **GetAll**: exito, error DB
+- **GetByID**: exito, not found, error DB
+- **Create**: exito, error DB
+- **Update**: exito, not found, error DB
+- **Delete**: exito, not found, error DB
 
 ## Comandos de testing y coverage
 
@@ -393,7 +305,6 @@ Ejecutar tests por capa:
 
 ```bash
 go test ./internal/application/service -v      # Tests del service
-go test ./internal/infrastructure/http -v       # Tests del handler
 ```
 
 Generar reporte de coverage:
@@ -414,6 +325,13 @@ docker compose exec app go tool cover -html=coverage.out
 
 ## Docker: Desarrollo y Produccion
 
+Los puertos de la aplicacion y de MongoDB se configuran desde el archivo `.env` (o `.env.docker`).
+
+| Variable | Descripcion | Default |
+|----------|-------------|---------|
+| `PORT_APP` | Puerto expuesto por la API Go | `8082` |
+| `MONGO_HOST_PORT` | Puerto expuesto por MongoDB en el host | `27017` |
+
 ### Opcion 1: Desarrollo con Docker Compose (Hot Reload)
 
 Levantar la aplicacion y MongoDB con recarga automatica usando Air:
@@ -424,7 +342,7 @@ docker compose --env-file .env.docker up --build
 
 Esto ejecuta:
 - **MongoDB**: en el puerto del host definido por `MONGO_HOST_PORT`
-- **App con Air** (Dockerfile.dev): en puerto `8082`, recarga automatica en cambios de codigo
+- **App con Air** (`Dockerfile.dev`): en puerto `${PORT_APP}`, recarga automatica en cambios de codigo
 
 Ver logs en vivo:
 
@@ -438,13 +356,39 @@ Para detener:
 docker compose down
 ```
 
-### Opcion 2: Produccion - Imagen Optimizada
+### Opcion 2: Produccion - Docker Compose Prod
 
-Compilar la imagen multietapa de produccion:
+Levantar la aplicacion con la imagen de produccion optimizada (multietapa, sin Air, sin codigo fuente):
 
 ```bash
-# Build
-docker build -t backend-productos:latest .
+docker compose -f docker-compose.prod.yml --env-file .env.docker up --build -d
+```
+
+Esto ejecuta:
+- **MongoDB**: en el puerto del host definido por `MONGO_HOST_PORT`
+- **App** (`Dockerfile`): binario compilado, ~5-10 MB, puerto `${PORT_APP}`
+
+Ver logs:
+
+```bash
+docker compose -f docker-compose.prod.yml logs -f app
+```
+
+Para detener:
+
+```bash
+docker compose -f docker-compose.prod.yml down
+```
+
+### Opcion 3: Build manual de la imagen de produccion
+
+Si prefieres construir y correr la imagen manualmente:
+
+```bash
+# Build con puerto personalizado
+docker build \
+  --build-arg PORT_APP=8082 \
+  -t backend-productos:latest .
 
 # Run (requiere MongoDB externo)
 docker run \
@@ -452,54 +396,58 @@ docker run \
   -e MONGO_USER=admin \
   -e MONGO_PASSWORD=secret \
   -e MONGO_DB=productos_db \
+  -e PORT_APP=8082 \
   -p 8082:8082 \
   backend-productos:latest
 ```
 
-La imagen final de produccion:
-- Tamaño: ~5-10 MB (solo binario compilado)
-- Sin codigo fuente ni herramientas de desarrollo
-- Segura para despliegue en produccion
-
 ### Estructura de Dockerfiles
 
 - **Dockerfile**: Multietapa para produccion
+  - Acepta `ARG PORT_APP=8082` en build time
   - Etapa 1: golang:1.26.2-alpine3.22, compila el binario
   - Etapa 2: alpine:3.18, solo binario, ~5-10 MB
+  - Healthcheck usa el puerto dinamico `${PORT_APP}`
 
 - **Dockerfile.dev**: Para desarrollo con Air
+  - Acepta `ARG PORT_APP=8082` en build time
   - golang:1.26.2-alpine3.22 + Air + golangci-lint preinstalados
   - Recarga automatica en cambios de codigo
   - Volumen montado del codigo fuente
 
+### Archivos Compose
+
+| Archivo | Proposito | Dockerfile usado |
+|---------|-----------|------------------|
+| `docker-compose.yml` | Desarrollo local con hot-reload | `Dockerfile.dev` |
+| `docker-compose.prod.yml` | Produccion, imagen optimizada | `Dockerfile` |
+
 ### .env requerido para Docker
 
-Para desarrollo local, usa `.env`:
+Crea un archivo `.env` (o `.env.docker`) con las variables necesarias:
 
 ```env
+PORT_APP=8082
+MONGO_HOST_PORT=27017
 MONGO_USER=admin
 MONGO_PASSWORD=P4ssW0rS3cr3t
 MONGO_DB=productos_db
-PORT_APP=8082
-MONGO_HOST=localhost
-MONGO_PORT=27017
-MONGO_HOST_PORT=27017
 RATE_LIMIT_READ_PER_MINUTE=30
 RATE_LIMIT_WRITE_PER_MINUTE=10
 ```
 
-Para desarrollo en Docker, existe `.env.docker` (cargado automaticamente en contenedor):
+Para desarrollo en Docker, anade tambien:
 
 ```env
-MONGO_USER=admin
-MONGO_PASSWORD=P4ssW0rS3cr3t
-MONGO_DB=productos_db
-PORT_APP=8082
 MONGO_HOST=mongodb
 MONGO_PORT=27017
-MONGO_HOST_PORT=27017
-RATE_LIMIT_READ_PER_MINUTE=30
-RATE_LIMIT_WRITE_PER_MINUTE=10
+```
+
+Para desarrollo local (fuera de Docker):
+
+```env
+MONGO_HOST=localhost
+MONGO_PORT=27017
 ```
 
 Ver `.env.example` para mas detalles.
@@ -617,18 +565,8 @@ Esto actualiza:
 ├── gqlgen.yml
 ├── plan.md
 ├── README.md
-├── api/
-│   ├── errors/
-│   │   └── codes.go
-│   └── response/
-│       └── response.go
 ├── config/
 │   └── mongo.go
-├── docs/
-│   ├── docs.go
-│   ├── error-codes.md
-│   ├── swagger.json
-│   └── swagger.yaml
 ├── graph/
 │   ├── schema/
 │   │   └── producto.graphqls
@@ -655,9 +593,6 @@ Esto actualiza:
 │   │       ├── categoria_repository.go
 │   │       └── inventario_repository.go
 │   └── infrastructure/
-│       ├── http/
-│       │   ├── producto_handler.go
-│       │   └── producto_handler_test.go
 │       └── persistence/
 │           ├── mongodb/
 │           │   ├── producto_repository.go
@@ -665,17 +600,15 @@ Esto actualiza:
 │           │   └── inventario_repository.go
 │           └── postgres/          # Legacy (referencia)
 │               └── producto_repository.go
-├── middleware/
-│   └── ratelimit.go
 ├── docker-compose.yml
+├── docker-compose.prod.yml
 ├── Dockerfile
 ├── Dockerfile.dev
 ├── main.go
 ├── go.mod
 ├── go.sum
-├── routes.go
 ├── tools.go
-└── swagger_test.go
+└── plan.md
 ```
 
 ## Notas tecnicas
@@ -684,9 +617,7 @@ Esto actualiza:
 - MongoDB usa `_id` como string (UUID string) para los IDs.
 - Soft delete via campo `deleted_at` (timestamp) en todas las colecciones.
 - Las relaciones se resuelven en GraphQL via field resolvers (`Producto.categoria`, `Producto.inventario`, `Categoria.productos`).
-- REST se mantiene como fallback junto a GraphQL.
 - **Arquitectura hexagonal**: las dependencias fluyen hacia adentro (infraestructura → dominio).
-- **Inyeccion de dependencias**: `main.go` instancia `repo → service → resolver/handler` y los inyecta.
-- **Paginacion REST**: `GET /productos` acepta `?page=N&limit=N` (default: page=1, limit=20, max=100).
-- **Paginacion GraphQL**: `productos(page: Int, limit: Int)` con mismos defaults.
+- **Inyeccion de dependencias**: `main.go` instancia `repo → service → resolver` y los inyecta.
+- **Paginacion GraphQL**: `productos(page: Int, limit: Int)` (default: page=1, limit=20, max=100).
 - **Colecciones MongoDB**: `productos`, `categorias`, `inventarios`.

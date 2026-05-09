@@ -7,19 +7,11 @@ dependenciesRules:
       shouldOnlyDependsOn:
         internal:
             - '**.internal.**'
-            - '**.api.**'
             - '**.config.**'
-            - '**.middleware.**'
-            - '**.docs.**'
             - '**.graph.**'
             - github.com/gin-gonic/gin
             - github.com/joho/godotenv
-            - github.com/swaggo/files
-            - github.com/swaggo/gin-swagger
             - github.com/99designs/gqlgen
-    - package: '**.docs.**'
-      shouldOnlyDependsOn:
-        internal: []
     - package: '**.internal.domain.**'
       shouldOnlyDependsOn:
         internal:
@@ -37,26 +29,15 @@ dependenciesRules:
             - '**.internal.domain.**'
             - '**.internal.application.**'
             - '**.internal.infrastructure.**'
-            - '**.api.**'
             - github.com/google/uuid
             - go.mongodb.org/mongo-driver
             - github.com/gin-gonic/gin
             - github.com/stretchr/testify
-    - package: '**.api.**'
-      shouldOnlyDependsOn:
-        internal:
-            - '**.api.**'
     - package: '**.config.**'
       shouldOnlyDependsOn:
         internal:
             - '**.config.**'
             - go.mongodb.org/mongo-driver
-    - package: '**.middleware.**'
-      shouldOnlyDependsOn:
-        internal:
-            - '**.middleware.**'
-            - '**.api.**'
-            - github.com/gin-gonic/gin
     - package: '**.graph.**'
       shouldOnlyDependsOn:
         internal:
