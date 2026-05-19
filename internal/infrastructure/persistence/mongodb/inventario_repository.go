@@ -41,7 +41,7 @@ func (r *InventarioRepository) GetAll(ctx context.Context) ([]model.Inventario, 
 }
 
 func (r *InventarioRepository) GetByID(ctx context.Context, id uuid.UUID) (*model.Inventario, error) {
-	filter := bson.M{"_id": id.String(), "deleted_at": nil}
+	filter := bson.M{"_id": id, "deleted_at": nil}
 
 	var inventario model.Inventario
 	if err := r.collection.FindOne(ctx, filter).Decode(&inventario); err != nil {
@@ -82,7 +82,7 @@ func (r *InventarioRepository) Create(ctx context.Context, i *model.Inventario) 
 func (r *InventarioRepository) Update(ctx context.Context, i *model.Inventario) error {
 	i.UpdatedAt = time.Now()
 
-	filter := bson.M{"_id": i.ID.String(), "deleted_at": nil}
+	filter := bson.M{"_id": i.ID, "deleted_at": nil}
 	update := bson.M{"$set": i}
 
 	result, err := r.collection.UpdateOne(ctx, filter, update)
@@ -98,7 +98,7 @@ func (r *InventarioRepository) Update(ctx context.Context, i *model.Inventario) 
 }
 
 func (r *InventarioRepository) Delete(ctx context.Context, id uuid.UUID) error {
-	filter := bson.M{"_id": id.String(), "deleted_at": nil}
+	filter := bson.M{"_id": id, "deleted_at": nil}
 	update := bson.M{"$set": bson.M{"deleted_at": time.Now()}}
 
 	result, err := r.collection.UpdateOne(ctx, filter, update)

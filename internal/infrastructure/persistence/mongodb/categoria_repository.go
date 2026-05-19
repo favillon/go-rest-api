@@ -41,7 +41,7 @@ func (r *CategoriaRepository) GetAll(ctx context.Context) ([]model.Categoria, er
 }
 
 func (r *CategoriaRepository) GetByID(ctx context.Context, id uuid.UUID) (*model.Categoria, error) {
-	filter := bson.M{"_id": id.String(), "deleted_at": nil}
+	filter := bson.M{"_id": id, "deleted_at": nil}
 
 	var categoria model.Categoria
 	if err := r.collection.FindOne(ctx, filter).Decode(&categoria); err != nil {
@@ -68,7 +68,7 @@ func (r *CategoriaRepository) Create(ctx context.Context, c *model.Categoria) er
 func (r *CategoriaRepository) Update(ctx context.Context, c *model.Categoria) error {
 	c.UpdatedAt = time.Now()
 
-	filter := bson.M{"_id": c.ID.String(), "deleted_at": nil}
+	filter := bson.M{"_id": c.ID, "deleted_at": nil}
 	update := bson.M{"$set": c}
 
 	result, err := r.collection.UpdateOne(ctx, filter, update)
@@ -84,7 +84,7 @@ func (r *CategoriaRepository) Update(ctx context.Context, c *model.Categoria) er
 }
 
 func (r *CategoriaRepository) Delete(ctx context.Context, id uuid.UUID) error {
-	filter := bson.M{"_id": id.String(), "deleted_at": nil}
+	filter := bson.M{"_id": id, "deleted_at": nil}
 	update := bson.M{"$set": bson.M{"deleted_at": time.Now()}}
 
 	result, err := r.collection.UpdateOne(ctx, filter, update)

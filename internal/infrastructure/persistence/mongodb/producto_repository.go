@@ -45,7 +45,7 @@ func (r *ProductoRepository) GetAll(ctx context.Context, page, limit int) ([]mod
 }
 
 func (r *ProductoRepository) GetByID(ctx context.Context, id uuid.UUID) (*model.Producto, error) {
-	filter := bson.M{"_id": id.String(), "deleted_at": nil}
+	filter := bson.M{"_id": id, "deleted_at": nil}
 
 	var producto model.Producto
 	if err := r.collection.FindOne(ctx, filter).Decode(&producto); err != nil {
@@ -72,7 +72,7 @@ func (r *ProductoRepository) Create(ctx context.Context, p *model.Producto) erro
 func (r *ProductoRepository) Update(ctx context.Context, p *model.Producto) error {
 	p.UpdatedAt = time.Now()
 
-	filter := bson.M{"_id": p.ID.String(), "deleted_at": nil}
+	filter := bson.M{"_id": p.ID, "deleted_at": nil}
 	update := bson.M{"$set": p}
 
 	result, err := r.collection.UpdateOne(ctx, filter, update)
@@ -88,7 +88,7 @@ func (r *ProductoRepository) Update(ctx context.Context, p *model.Producto) erro
 }
 
 func (r *ProductoRepository) Delete(ctx context.Context, id uuid.UUID) error {
-	filter := bson.M{"_id": id.String(), "deleted_at": nil}
+	filter := bson.M{"_id": id, "deleted_at": nil}
 	update := bson.M{"$set": bson.M{"deleted_at": time.Now()}}
 
 	result, err := r.collection.UpdateOne(ctx, filter, update)
