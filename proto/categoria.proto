@@ -1,0 +1,65 @@
+syntax = "proto3";
+
+package productos;
+
+option go_package = "backend-productos/proto;proto";
+
+import "google/protobuf/empty.proto";
+import "google/protobuf/timestamp.proto";
+
+message Categoria {
+  string id = 1;
+  string nombre = 2;
+  string descripcion = 3;
+  repeated string producto_ids = 4;
+  google.protobuf.Timestamp created_at = 5;
+  google.protobuf.Timestamp updated_at = 6;
+}
+
+message CreateCategoriaRequest {
+  string nombre = 1;
+  string descripcion = 2;
+  repeated string producto_ids = 3;
+}
+
+message CreateCategoriaResponse {
+  Categoria categoria = 1;
+}
+
+message GetCategoriaRequest {
+  string id = 1;
+}
+
+message GetCategoriaResponse {
+  Categoria categoria = 1;
+}
+
+message UpdateCategoriaRequest {
+  string id = 1;
+  string nombre = 2;
+  string descripcion = 3;
+  repeated string producto_ids = 4;
+}
+
+message UpdateCategoriaResponse {
+  Categoria categoria = 1;
+}
+
+message DeleteCategoriaRequest {
+  string id = 1;
+}
+
+message ListCategoriasRequest {
+}
+
+message ListCategoriasResponse {
+  repeated Categoria categorias = 1;
+}
+
+service CategoriaService {
+  rpc CreateCategoria(CreateCategoriaRequest) returns (CreateCategoriaResponse);
+  rpc GetCategoria(GetCategoriaRequest) returns (GetCategoriaResponse);
+  rpc UpdateCategoria(UpdateCategoriaRequest) returns (UpdateCategoriaResponse);
+  rpc DeleteCategoria(DeleteCategoriaRequest) returns (google.protobuf.Empty);
+  rpc ListCategorias(ListCategoriasRequest) returns (ListCategoriasResponse);
+}

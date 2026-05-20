@@ -22,22 +22,20 @@ services:
       context: .
       dockerfile: Dockerfile
       args:
-        PORT_APP: ${PORT_APP:-8082}
+        PORT_GRPC: ${PORT_GRPC:-50051}
     container_name: backend-productos-app
     restart: unless-stopped
     ports:
-      - "${PORT_APP:-8082}:${PORT_APP:-8082}"
+      - "${PORT_GRPC:-50051}:${PORT_GRPC:-50051}"
     environment:
       MONGO_HOST: mongodb
       MONGO_PORT: 27017
       MONGO_USER: ${MONGO_USER}
       MONGO_PASSWORD: ${MONGO_PASSWORD}
       MONGO_DB: ${MONGO_DB}
-      PORT_APP: ${PORT_APP:-8082}
-      RATE_LIMIT_READ_PER_MINUTE: ${RATE_LIMIT_READ_PER_MINUTE:-30}
-      RATE_LIMIT_WRITE_PER_MINUTE: ${RATE_LIMIT_WRITE_PER_MINUTE:-10}
+      PORT_GRPC: ${PORT_GRPC:-50051}
     healthcheck:
-      test: ["CMD-SHELL", "curl --fail --silent --show-error http://localhost:${PORT_APP:-8082}/api/v1/graphql >/dev/null || exit 1"]
+      test: ["CMD-SHELL", "nc -z localhost ${PORT_GRPC:-50051} >/dev/null || exit 1"]
       interval: 1m
       timeout: 10s
       start_period: 60s

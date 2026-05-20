@@ -4,15 +4,14 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"os/signal"
+	"syscall"
 
 	"backend-productos/config"
-	"backend-productos/graph"
 	"backend-productos/internal/application/service"
+	grpcserver "backend-productos/internal/infrastructure/grpc"
 	"backend-productos/internal/infrastructure/persistence/mongodb"
 
-	"github.com/99designs/gqlgen/graphql/handler"
-	"github.com/99designs/gqlgen/graphql/playground"
-	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
 )
 
@@ -41,35 +40,31 @@ func main() {
 	categoriaSvc := service.NewCategoriaService(categoriaRepo)
 	inventarioSvc := service.NewInventarioService(inventarioRepo)
 
-	resolver := &graph.Resolver{
-		ProductoService:   productoSvc,
-		CategoriaService:  categoriaSvc,
-		InventarioService: inventarioSvc,
-	}
+	server := grpcserver.NewServer(productoSvc, categoriaSvc, inventarioSvc)
 
-	r := gin.Default()
+	// Graceful shutdown
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 
-	gqlHandler := handler.NewDefaultServer(
-		graph.NewExecutableSchema(graph.Config{Resolvers: resolver}),
-	)
-	r.POST("/api/v1/graphql", func(c *gin.Context) {
-		gqlHandler.ServeHTTP(c.Writer, c.Request)
-	})
-	r.GET("/api/v1/graphql", gin.WrapH(playground.Handler("GraphQL Playground", "/api/v1/graphql")))
+	go func() {
+		<-quit
+		server.GracefulStop()
+	}()
 
+	port := getGRPCPort()
 	fmt.Println("backend-productos iniciado")
 	fmt.Println("Conexion a MongoDB exitosa")
-	fmt.Println("GraphQL Playground: http://localhost:" + getPort() + "/api/v1/graphql")
+	fmt.Printf("gRPC server listening on port %s\n", port)
 
-	if err := r.Run(":" + getPort()); err != nil {
-		log.Fatalf("server failed: %v", err)
+	if err := server.Start(port); err != nil {
+		log.Fatalf("gRPC server failed: %v", err)
 	}
 }
 
-func getPort() string {
-	port := os.Getenv("PORT_APP")
+func getGRPCPort() string {
+	port := os.Getenv("PORT_GRPC")
 	if port == "" {
-		port = "8082"
+		port = "50051"
 	}
 	return port
 }

@@ -1,0 +1,67 @@
+syntax = "proto3";
+
+package productos;
+
+option go_package = "backend-productos/proto;proto";
+
+import "google/protobuf/empty.proto";
+import "google/protobuf/timestamp.proto";
+
+message Producto {
+  string id = 1;
+  string nombre = 2;
+  string descripcion = 3;
+  double precio = 4;
+  google.protobuf.Timestamp created_at = 5;
+  google.protobuf.Timestamp updated_at = 6;
+}
+
+message CreateProductoRequest {
+  string nombre = 1;
+  string descripcion = 2;
+  double precio = 3;
+}
+
+message CreateProductoResponse {
+  Producto producto = 1;
+}
+
+message GetProductoRequest {
+  string id = 1;
+}
+
+message GetProductoResponse {
+  Producto producto = 1;
+}
+
+message UpdateProductoRequest {
+  string id = 1;
+  string nombre = 2;
+  string descripcion = 3;
+  double precio = 4;
+}
+
+message UpdateProductoResponse {
+  Producto producto = 1;
+}
+
+message DeleteProductoRequest {
+  string id = 1;
+}
+
+message ListProductosRequest {
+  int32 page = 1;
+  int32 limit = 2;
+}
+
+message ListProductosResponse {
+  repeated Producto productos = 1;
+}
+
+service ProductoService {
+  rpc CreateProducto(CreateProductoRequest) returns (CreateProductoResponse);
+  rpc GetProducto(GetProductoRequest) returns (GetProductoResponse);
+  rpc UpdateProducto(UpdateProductoRequest) returns (UpdateProductoResponse);
+  rpc DeleteProducto(DeleteProductoRequest) returns (google.protobuf.Empty);
+  rpc ListProductos(ListProductosRequest) returns (ListProductosResponse);
+}

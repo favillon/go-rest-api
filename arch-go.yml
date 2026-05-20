@@ -8,10 +8,9 @@ dependenciesRules:
         internal:
             - '**.internal.**'
             - '**.config.**'
-            - '**.graph.**'
-            - github.com/gin-gonic/gin
+            - '**.proto.**'
             - github.com/joho/godotenv
-            - github.com/99designs/gqlgen
+            - google.golang.org/grpc
     - package: '**.internal.domain.**'
       shouldOnlyDependsOn:
         internal:
@@ -29,20 +28,18 @@ dependenciesRules:
             - '**.internal.domain.**'
             - '**.internal.application.**'
             - '**.internal.infrastructure.**'
+            - '**.proto.**'
             - github.com/google/uuid
             - go.mongodb.org/mongo-driver
-            - github.com/gin-gonic/gin
+            - google.golang.org/grpc
             - github.com/stretchr/testify
     - package: '**.config.**'
       shouldOnlyDependsOn:
         internal:
             - '**.config.**'
             - go.mongodb.org/mongo-driver
-    - package: '**.graph.**'
+    - package: '**.proto.**'
       shouldOnlyDependsOn:
         internal:
-            - '**.internal.domain.**'
-            - '**.internal.application.**'
-            - '**.graph.**'
-            - github.com/google/uuid
-            - github.com/99designs/gqlgen
+            - '**.proto.**'
+            - google.golang.org/protobuf

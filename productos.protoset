@@ -1,0 +1,151 @@
+
+¾
+google/protobuf/empty.protogoogle.protobuf"
+EmptyB}
+com.google.protobufB
+EmptyProtoPZ.google.golang.org/protobuf/types/known/emptypbø¢GPBªGoogle.Protobuf.WellKnownTypesbproto3
+ÿ
+google/protobuf/timestamp.protogoogle.protobuf";
+	Timestamp
+seconds (Rseconds
+nanos (RnanosB…
+com.google.protobufBTimestampProtoPZ2google.golang.org/protobuf/types/known/timestamppbø¢GPBªGoogle.Protobuf.WellKnownTypesbproto3
+Ü
+proto/categoria.proto	productosgoogle/protobuf/empty.protogoogle/protobuf/timestamp.proto"î
+	Categoria
+id (	Rid
+nombre (	Rnombre 
+descripcion (	Rdescripcion!
+producto_ids (	RproductoIds9
+
+created_at (2.google.protobuf.TimestampR	createdAt9
+
+updated_at (2.google.protobuf.TimestampR	updatedAt"u
+CreateCategoriaRequest
+nombre (	Rnombre 
+descripcion (	Rdescripcion!
+producto_ids (	RproductoIds"M
+CreateCategoriaResponse2
+	categoria (2.productos.CategoriaR	categoria"%
+GetCategoriaRequest
+id (	Rid"J
+GetCategoriaResponse2
+	categoria (2.productos.CategoriaR	categoria"…
+UpdateCategoriaRequest
+id (	Rid
+nombre (	Rnombre 
+descripcion (	Rdescripcion!
+producto_ids (	RproductoIds"M
+UpdateCategoriaResponse2
+	categoria (2.productos.CategoriaR	categoria"(
+DeleteCategoriaRequest
+id (	Rid"
+ListCategoriasRequest"N
+ListCategoriasResponse4
+
+categorias (2.productos.CategoriaR
+categorias2¼
+CategoriaServiceX
+CreateCategoria!.productos.CreateCategoriaRequest".productos.CreateCategoriaResponseO
+GetCategoria.productos.GetCategoriaRequest.productos.GetCategoriaResponseX
+UpdateCategoria!.productos.UpdateCategoriaRequest".productos.UpdateCategoriaResponseL
+DeleteCategoria!.productos.DeleteCategoriaRequest.google.protobuf.EmptyU
+ListCategorias .productos.ListCategoriasRequest!.productos.ListCategoriasResponseBZbackend-productos/proto;protobproto3
+‰
+proto/inventario.proto	productosgoogle/protobuf/empty.protogoogle/protobuf/timestamp.proto"é
+
+Inventario
+id (	Rid
+producto_id (	R
+productoId
+cantidad (Rcantidad
+almacen (	Ralmacen9
+
+created_at (2.google.protobuf.TimestampR	createdAt9
+
+updated_at (2.google.protobuf.TimestampR	updatedAt"p
+CreateInventarioRequest
+producto_id (	R
+productoId
+cantidad (Rcantidad
+almacen (	Ralmacen"Q
+CreateInventarioResponse5
+
+inventario (2.productos.InventarioR
+inventario"&
+GetInventarioRequest
+id (	Rid"N
+GetInventarioResponse5
+
+inventario (2.productos.InventarioR
+inventario"C
+ GetInventarioByProductoIdRequest
+producto_id (	R
+productoId"Z
+!GetInventarioByProductoIdResponse5
+
+inventario (2.productos.InventarioR
+inventario"€
+UpdateInventarioRequest
+id (	Rid
+producto_id (	R
+productoId
+cantidad (Rcantidad
+almacen (	Ralmacen"Q
+UpdateInventarioResponse5
+
+inventario (2.productos.InventarioR
+inventario")
+DeleteInventarioRequest
+id (	Rid"
+ListInventariosRequest"R
+ListInventariosResponse7
+inventarios (2.productos.InventarioRinventarios2Ã
+InventarioService[
+CreateInventario".productos.CreateInventarioRequest#.productos.CreateInventarioResponseR
+GetInventario.productos.GetInventarioRequest .productos.GetInventarioResponsev
+GetInventarioByProductoId+.productos.GetInventarioByProductoIdRequest,.productos.GetInventarioByProductoIdResponse[
+UpdateInventario".productos.UpdateInventarioRequest#.productos.UpdateInventarioResponseN
+DeleteInventario".productos.DeleteInventarioRequest.google.protobuf.EmptyX
+ListInventarios!.productos.ListInventariosRequest".productos.ListInventariosResponseBZbackend-productos/proto;protobproto3
+¾
+proto/producto.proto	productosgoogle/protobuf/empty.protogoogle/protobuf/timestamp.proto"â
+Producto
+id (	Rid
+nombre (	Rnombre 
+descripcion (	Rdescripcion
+precio (Rprecio9
+
+created_at (2.google.protobuf.TimestampR	createdAt9
+
+updated_at (2.google.protobuf.TimestampR	updatedAt"i
+CreateProductoRequest
+nombre (	Rnombre 
+descripcion (	Rdescripcion
+precio (Rprecio"I
+CreateProductoResponse/
+producto (2.productos.ProductoRproducto"$
+GetProductoRequest
+id (	Rid"F
+GetProductoResponse/
+producto (2.productos.ProductoRproducto"y
+UpdateProductoRequest
+id (	Rid
+nombre (	Rnombre 
+descripcion (	Rdescripcion
+precio (Rprecio"I
+UpdateProductoResponse/
+producto (2.productos.ProductoRproducto"'
+DeleteProductoRequest
+id (	Rid"@
+ListProductosRequest
+page (Rpage
+limit (Rlimit"J
+ListProductosResponse1
+	productos (2.productos.ProductoR	productos2­
+ProductoServiceU
+CreateProducto .productos.CreateProductoRequest!.productos.CreateProductoResponseL
+GetProducto.productos.GetProductoRequest.productos.GetProductoResponseU
+UpdateProducto .productos.UpdateProductoRequest!.productos.UpdateProductoResponseJ
+DeleteProducto .productos.DeleteProductoRequest.google.protobuf.EmptyR
+ListProductos.productos.ListProductosRequest .productos.ListProductosResponseBZbackend-productos/proto;protobproto3
