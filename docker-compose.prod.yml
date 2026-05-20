@@ -1,7 +1,7 @@
 services:
   mongodb:
     image: mongo:7
-    container_name: backend-productos-mongodb
+    container_name: backend-productos-grpc-mongodb
     restart: unless-stopped
     ports:
       - "${MONGO_HOST_PORT:-27017}:27017"
@@ -23,7 +23,7 @@ services:
       dockerfile: Dockerfile
       args:
         PORT_GRPC: ${PORT_GRPC:-50051}
-    container_name: backend-productos-app
+    container_name: backend-productos-grpc-app
     restart: unless-stopped
     ports:
       - "${PORT_GRPC:-50051}:${PORT_GRPC:-50051}"
