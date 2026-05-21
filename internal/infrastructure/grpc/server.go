@@ -40,7 +40,7 @@ func NewServer(
 
 // Start listens on the given port and serves gRPC requests.
 func (s *Server) Start(port string) error {
-	lis, err := net.Listen("tcp", ":"+port)
+	lis, err := net.Listen("tcp", "0.0.0.0:"+port)
 	if err != nil {
 		return fmt.Errorf("failed to listen on port %s: %w", port, err)
 	}
