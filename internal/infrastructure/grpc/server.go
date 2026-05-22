@@ -11,6 +11,7 @@ import (
 	pb "backend-productos/proto"
 
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/reflection"
 )
 
 // Server wraps a gRPC server with registered services.
@@ -34,6 +35,9 @@ func NewServer(
 	pb.RegisterProductoServiceServer(s, handler.NewProductoHandler(productoSvc))
 	pb.RegisterCategoriaServiceServer(s, handler.NewCategoriaHandler(categoriaSvc))
 	pb.RegisterInventarioServiceServer(s, handler.NewInventarioHandler(inventarioSvc))
+
+	// Enable server reflection so tools (grpcurl, grpcui) can discover services.
+	reflection.Register(s)
 
 	return &Server{grpcServer: s}
 }
